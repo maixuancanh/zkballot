@@ -14,6 +14,34 @@ fn setup() -> (Env, BallotContractClient<'static>, Address, BytesN<32>) {
     (env, client, admin, root)
 }
 
+fn field_bytes_from_u64(env: &Env, value: u64) -> Bytes {
+    let mut bytes = [0u8; 32];
+    bytes[24..32].copy_from_slice(&value.to_be_bytes());
+    Bytes::from_array(env, &bytes)
+}
+
+fn field_bytes_from_u32(env: &Env, value: u32) -> Bytes {
+    let mut bytes = [0u8; 32];
+    bytes[28..32].copy_from_slice(&value.to_be_bytes());
+    Bytes::from_array(env, &bytes)
+}
+
+fn public_inputs(
+    env: &Env,
+    root: &BytesN<32>,
+    proposal_id: u64,
+    nullifier: &BytesN<32>,
+    vote: u32,
+) -> Bytes {
+    let mut out = Bytes::new(env);
+    out.append(&Bytes::from(root.clone()));
+    out.append(&field_bytes_from_u64(env, 987_654));
+    out.append(&field_bytes_from_u64(env, proposal_id));
+    out.append(&Bytes::from(nullifier.clone()));
+    out.append(&field_bytes_from_u32(env, vote));
+    out
+}
+
 #[test]
 fn constructor_exposes_admin_domain_and_vk() {
     let (env, client, admin, _root) = setup();
@@ -44,7 +72,7 @@ fn cast_vote_updates_public_tally_and_blocks_double_vote() {
     client.create_proposal(&1, &String::from_str(&env, "Ship zkBallot"), &root);
 
     let nullifier = BytesN::from_array(&env, &[9; 32]);
-    let public_inputs = Bytes::from_array(&env, &[0; 160]);
+    let public_inputs = public_inputs(&env, &root, 1, &nullifier, 1);
     let proof = Bytes::from_slice(&env, &[42]);
 
     let tally = client
@@ -54,7 +82,7 @@ fn cast_vote_updates_public_tally_and_blocks_double_vote() {
     assert_eq!(tally, Tally { yes: 1, no: 0 });
     assert_eq!(client.has_voted(&1, &nullifier), true);
 
-    let second = client.try_cast_vote(&1, &root, &nullifier, &0, &public_inputs, &proof);
+    let second = client.try_cast_vote(&1, &root, &nullifier, &1, &public_inputs, &proof);
     assert_eq!(second, Err(Ok(Error::NullifierUsed)));
 }
 
@@ -64,13 +92,36 @@ fn cast_vote_rejects_invalid_vote_and_unknown_root() {
     client.create_proposal(&1, &String::from_str(&env, "Ship zkBallot"), &root);
 
     let nullifier = BytesN::from_array(&env, &[9; 32]);
-    let public_inputs = Bytes::from_array(&env, &[0; 160]);
+    let invalid_vote_public_inputs = public_inputs(&env, &root, 1, &nullifier, 2);
     let proof = Bytes::from_slice(&env, &[42]);
 
-    let invalid_vote = client.try_cast_vote(&1, &root, &nullifier, &2, &public_inputs, &proof);
+    let invalid_vote =
+        client.try_cast_vote(&1, &root, &nullifier, &2, &invalid_vote_public_inputs, &proof);
     assert_eq!(invalid_vote, Err(Ok(Error::InvalidVote)));
 
     let wrong_root = BytesN::from_array(&env, &[8; 32]);
-    let unknown_root = client.try_cast_vote(&1, &wrong_root, &nullifier, &1, &public_inputs, &proof);
+    let wrong_root_public_inputs = public_inputs(&env, &wrong_root, 1, &nullifier, 1);
+    let unknown_root =
+        client.try_cast_vote(&1, &wrong_root, &nullifier, &1, &wrong_root_public_inputs, &proof);
     assert_eq!(unknown_root, Err(Ok(Error::RootMissing)));
+}
+
+#[test]
+fn cast_vote_rejects_mismatched_public_inputs() {
+    let (env, client, _admin, root) = setup();
+    client.create_proposal(&1, &String::from_str(&env, "Ship zkBallot"), &root);
+
+    let nullifier = BytesN::from_array(&env, &[9; 32]);
+    let proof = Bytes::from_slice(&env, &[42]);
+    let mismatched_vote_public_inputs = public_inputs(&env, &root, 1, &nullifier, 0);
+
+    let result = client.try_cast_vote(
+        &1,
+        &root,
+        &nullifier,
+        &1,
+        &mismatched_vote_public_inputs,
+        &proof,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidPublicInputs)));
 }

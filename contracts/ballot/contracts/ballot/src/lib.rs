@@ -171,6 +171,16 @@ impl BallotContract {
         if public_inputs.len() != 160 {
             return Err(Error::InvalidPublicInputs);
         }
+        if !Self::public_inputs_match(
+            &env,
+            &public_inputs,
+            &merkle_root,
+            proposal_id,
+            &nullifier,
+            vote,
+        )? {
+            return Err(Error::InvalidPublicInputs);
+        }
         if proof.is_empty() {
             return Err(Error::EmptyProof);
         }
@@ -192,6 +202,39 @@ impl BallotContract {
 
         Self::verify_ultrahonk(&env, &public_inputs, &proof)?;
         Self::record_vote(env, proposal_id, nullifier, vote)
+    }
+
+    fn public_inputs_match(
+        env: &Env,
+        public_inputs: &Bytes,
+        merkle_root: &BytesN<32>,
+        proposal_id: u64,
+        nullifier: &BytesN<32>,
+        vote: u32,
+    ) -> Result<bool, Error> {
+        let contract_domain: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::ContractDomain)
+            .ok_or(Error::NotInitialized)?;
+
+        Ok(public_inputs.slice(0..32) == Bytes::from(merkle_root.clone())
+            && public_inputs.slice(32..64) == Self::field_bytes_from_u64(env, contract_domain)
+            && public_inputs.slice(64..96) == Self::field_bytes_from_u64(env, proposal_id)
+            && public_inputs.slice(96..128) == Bytes::from(nullifier.clone())
+            && public_inputs.slice(128..160) == Self::field_bytes_from_u32(env, vote))
+    }
+
+    fn field_bytes_from_u64(env: &Env, value: u64) -> Bytes {
+        let mut bytes = [0u8; 32];
+        bytes[24..32].copy_from_slice(&value.to_be_bytes());
+        Bytes::from_array(env, &bytes)
+    }
+
+    fn field_bytes_from_u32(env: &Env, value: u32) -> Bytes {
+        let mut bytes = [0u8; 32];
+        bytes[28..32].copy_from_slice(&value.to_be_bytes());
+        Bytes::from_array(env, &bytes)
     }
 
     #[cfg(not(test))]
