@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:artifacts": "bash scripts/build-artifacts.sh",
     "test": "vitest run",
     "test:watch": "vitest"
   },

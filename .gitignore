@@ -1,6 +1,7 @@
 .env
 .env.local
 node_modules/
+tools/bin/jq
 web/node_modules/
 dist/
 web/dist/
@@ -12,4 +13,4 @@ target/
 vk
 proof
 public_inputs
-
+!artifacts/ballot/vk
