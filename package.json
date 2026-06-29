@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build:artifacts": "bash scripts/build-artifacts.sh",
+    "deploy:testnet": "bash scripts/deploy-testnet.sh",
     "fixture:inputs": "tsx scripts/generate-proof-inputs.ts",
     "fixture:prove": "bash scripts/prove-fixture.sh",
     "web:build": "cd web && vite build",
