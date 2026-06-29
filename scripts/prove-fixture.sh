@@ -6,21 +6,21 @@ CIRCUIT_DIR="$ROOT_DIR/circuits/ballot"
 FIXTURE_DIR="$ROOT_DIR/artifacts/fixture"
 JQ_BIN="$ROOT_DIR/tools/bin/jq"
 
-if ! command -v jq >/dev/null 2>&1; then
-  if [[ ! -x "$JQ_BIN" ]]; then
-    mkdir -p "$(dirname "$JQ_BIN")"
-    curl -L --fail \
-      https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 \
-      -o "$JQ_BIN"
-    chmod +x "$JQ_BIN"
-  fi
-  export PATH="$(dirname "$JQ_BIN"):$PATH"
+if [[ ! -x "$JQ_BIN" ]]; then
+  mkdir -p "$(dirname "$JQ_BIN")"
+  curl -L --fail \
+    https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 \
+    -o "$JQ_BIN"
+  chmod +x "$JQ_BIN"
 fi
+export PATH="$(dirname "$JQ_BIN"):$PATH"
+export PATH="$(dirname "$JQ_BIN"):$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.nargo/bin"
 
 npm run fixture:inputs
 
 (
   cd "$CIRCUIT_DIR"
+  nargo compile
   nargo execute ballot_witness
   bb prove \
     --scheme ultra_honk \

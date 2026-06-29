@@ -6,16 +6,15 @@ CIRCUIT_DIR="$ROOT_DIR/circuits/ballot"
 ARTIFACT_DIR="$ROOT_DIR/artifacts/ballot"
 JQ_BIN="$ROOT_DIR/tools/bin/jq"
 
-if ! command -v jq >/dev/null 2>&1; then
-  if [[ ! -x "$JQ_BIN" ]]; then
-    mkdir -p "$(dirname "$JQ_BIN")"
-    curl -L --fail \
-      https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 \
-      -o "$JQ_BIN"
-    chmod +x "$JQ_BIN"
-  fi
-  export PATH="$(dirname "$JQ_BIN"):$PATH"
+if [[ ! -x "$JQ_BIN" ]]; then
+  mkdir -p "$(dirname "$JQ_BIN")"
+  curl -L --fail \
+    https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 \
+    -o "$JQ_BIN"
+  chmod +x "$JQ_BIN"
 fi
+export PATH="$(dirname "$JQ_BIN"):$PATH"
+export PATH="$(dirname "$JQ_BIN"):$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.nargo/bin"
 
 mkdir -p "$ARTIFACT_DIR"
 
