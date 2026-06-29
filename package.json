@@ -4,10 +4,13 @@
   "type": "module",
   "scripts": {
     "build:artifacts": "bash scripts/build-artifacts.sh",
+    "fixture:inputs": "tsx scripts/generate-proof-inputs.ts",
+    "fixture:prove": "bash scripts/prove-fixture.sh",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "tsx": "^4.22.4",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },

@@ -14,3 +14,5 @@ vk
 proof
 public_inputs
 !artifacts/ballot/vk
+!artifacts/fixture/proof
+!artifacts/fixture/public_inputs
