@@ -1,0 +1,6 @@
+[package]
+name = "ballot"
+type = "bin"
+authors = [""]
+
+[dependencies]

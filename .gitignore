@@ -1,0 +1,15 @@
+.env
+.env.local
+node_modules/
+web/node_modules/
+dist/
+web/dist/
+target/
+**/target/
+*.proof
+*.witness
+*.gz
+vk
+proof
+public_inputs
+
