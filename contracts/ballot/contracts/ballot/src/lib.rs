@@ -2,6 +2,8 @@
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env, String,
 };
+#[cfg(not(test))]
+use ultrahonk_rust_verifier::{UltraHonkVerifier, PROOF_BYTES};
 
 #[contract]
 pub struct BallotContract;
@@ -47,6 +49,9 @@ pub enum Error {
     InvalidVote = 7,
     InvalidPublicInputs = 8,
     EmptyProof = 9,
+    VkParseError = 10,
+    ProofParseError = 11,
+    VerificationFailed = 12,
 }
 
 #[contractimpl]
@@ -169,6 +174,10 @@ impl BallotContract {
         if proof.is_empty() {
             return Err(Error::EmptyProof);
         }
+        #[cfg(not(test))]
+        if proof.len() as usize != PROOF_BYTES {
+            return Err(Error::ProofParseError);
+        }
 
         let proposal = Self::proposal(env.clone(), proposal_id)?;
         if !proposal.active || proposal.root != merkle_root {
@@ -181,10 +190,30 @@ impl BallotContract {
             return Err(Error::NullifierUsed);
         }
 
-        // Real UltraHonk verification is wired in the next task. This state layer already
-        // enforces public-input shape, proposal/root membership, binary public vote, and
-        // nullifier uniqueness before tally mutation.
+        Self::verify_ultrahonk(&env, &public_inputs, &proof)?;
         Self::record_vote(env, proposal_id, nullifier, vote)
+    }
+
+    #[cfg(not(test))]
+    fn verify_ultrahonk(env: &Env, public_inputs: &Bytes, proof: &Bytes) -> Result<(), Error> {
+        let vk_bytes: Bytes = env
+            .storage()
+            .instance()
+            .get(&DataKey::VerifyingKey)
+            .ok_or(Error::NotInitialized)?;
+        let verifier = UltraHonkVerifier::new(env, &vk_bytes).map_err(|_| Error::VkParseError)?;
+        verifier
+            .verify(proof, public_inputs)
+            .map_err(|_| Error::VerificationFailed)?;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn verify_ultrahonk(_env: &Env, _public_inputs: &Bytes, proof: &Bytes) -> Result<(), Error> {
+        if proof.is_empty() {
+            return Err(Error::EmptyProof);
+        }
+        Ok(())
     }
 
     fn require_admin(env: &Env) -> Result<(), Error> {
