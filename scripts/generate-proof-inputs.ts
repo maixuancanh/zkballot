@@ -10,7 +10,7 @@ import {
   verifyPath,
 } from "./merkle.js";
 
-const TREE_DEPTH = 20;
+const TREE_DEPTH = 4;
 const DOMAIN_ZKBALLOT = 1514885697n;
 
 const rootDir = new URL("..", import.meta.url).pathname;

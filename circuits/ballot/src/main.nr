@@ -1,4 +1,4 @@
-global TREE_DEPTH: u32 = 20;
+global TREE_DEPTH: u32 = 4;
 global DOMAIN_ZKBALLOT: Field = 1514885697;
 
 use dep::poseidon::poseidon2::Poseidon2;

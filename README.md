@@ -65,6 +65,8 @@ The public input order is fixed:
 
 Each field is encoded as one canonical 32-byte big-endian BN254 scalar.
 
+The checked-in demo circuit uses a small Merkle depth (`4`) to keep the testnet verifier path lightweight. Increase `TREE_DEPTH` in the Noir circuit and fixture generator for larger registries, then regenerate VK/proofs and redeploy.
+
 ## Testnet deploy
 
 Create a funded Stellar CLI identity first, then:
@@ -76,6 +78,21 @@ npm run deploy:testnet
 ```
 
 The deploy script builds artifacts, proves the fixture, builds WASM, and deploys with the VK passed to the constructor.
+
+Latest testnet demo deployment:
+
+- Contract: `CBRDNA55CAQTAQD2VWIMILT224RSBGXBQ2ERYUD7XOZBTTGU37TX4ZJJ`
+- Deploy tx: <https://stellar.expert/explorer/testnet/tx/6aba7e821c09aa33bb02a4f6e74088e5f9688187d632969e24e09ac430349429>
+- Proposal tx: <https://stellar.expert/explorer/testnet/tx/1218755d63c577609aeb4d78fcf6874d2732fe9640eb120a0d9732eb1a3c91d4>
+
+The proposal/root state is live on testnet. The `cast_vote` path currently reaches Soroban simulation but fails with `HostError: Error(Budget, ExceededLimit)` while running the UltraHonk verifier. This is a testnet budget/verifier-cost blocker, not a native proof failure: `npm run fixture:prove` verifies the same proof successfully with `bb`.
+
+Run the state/proof demo:
+
+```bash
+npm run fixture:prove
+npm run demo:testnet
+```
 
 ## Demo UI
 
