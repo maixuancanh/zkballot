@@ -9,19 +9,25 @@ WASM="$CONTRACT_DIR/target/wasm32v1-none/release/ballot.wasm"
 : "${STELLAR_SOURCE:?Set STELLAR_SOURCE to a funded Stellar CLI identity/account}"
 : "${ADMIN_ADDRESS:?Set ADMIN_ADDRESS to the admin public address}"
 : "${CONTRACT_DOMAIN:=987654}"
+: "${STELLAR_BUILD_FEATURES:=}"
+: "${STELLAR_CONTRACT_ALIAS:=zkballot}"
 
 npm run build:artifacts
 npm run fixture:prove
 (
   cd "$CONTRACT_DIR"
-  stellar contract build
+  if [[ -n "$STELLAR_BUILD_FEATURES" ]]; then
+    stellar contract build --features "$STELLAR_BUILD_FEATURES"
+  else
+    stellar contract build
+  fi
 )
 
 stellar contract deploy \
   --network "$STELLAR_NETWORK" \
   --source "$STELLAR_SOURCE" \
   --wasm "$WASM" \
-  --alias zkballot \
+  --alias "$STELLAR_CONTRACT_ALIAS" \
   -- \
   --admin "$ADMIN_ADDRESS" \
   --contract_domain "$CONTRACT_DOMAIN" \

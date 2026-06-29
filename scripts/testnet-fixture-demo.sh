@@ -22,17 +22,37 @@ NULLIFIER_HEX="$(xxd -p -c 256 -s 96 -l 32 artifacts/fixture/public_inputs)"
 
 printf '%s\n' '"Fixture proposal"' > "$TITLE_JSON"
 
+invoke_read() {
+  stellar contract invoke \
+    --network "$STELLAR_NETWORK" \
+    --source "$STELLAR_SOURCE" \
+    --id "$BALLOT_ID" \
+    --send no \
+    "$@"
+}
+
+retry_read() {
+  local label="$1"
+  shift
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if invoke_read "$@"; then
+      return 0
+    fi
+    if [[ "$attempt" -lt 5 ]]; then
+      echo "$label not visible yet; retrying..."
+      sleep 3
+    fi
+  done
+  return 1
+}
+
 echo "Contract: $BALLOT_ID"
 echo "Proposal: $PROPOSAL_ID"
 echo "Root: $ROOT_HEX"
 echo "Nullifier: $NULLIFIER_HEX"
 
-if stellar contract invoke \
-  --network "$STELLAR_NETWORK" \
-  --source "$STELLAR_SOURCE" \
-  --id "$BALLOT_ID" \
-  --send no \
-  -- proposal \
+if invoke_read -- proposal \
   --proposal_id "$PROPOSAL_ID" >/tmp/zkballot-proposal.json 2>/tmp/zkballot-proposal.err; then
   echo "Proposal already exists:"
   cat /tmp/zkballot-proposal.json
@@ -71,20 +91,10 @@ if [[ "$CAST_STATUS" -ne 0 ]]; then
 fi
 
 echo "Tally:"
-stellar contract invoke \
-  --network "$STELLAR_NETWORK" \
-  --source "$STELLAR_SOURCE" \
-  --id "$BALLOT_ID" \
-  --send no \
-  -- tally \
+retry_read "Tally" -- tally \
   --proposal_id "$PROPOSAL_ID"
 
 echo "Has voted:"
-stellar contract invoke \
-  --network "$STELLAR_NETWORK" \
-  --source "$STELLAR_SOURCE" \
-  --id "$BALLOT_ID" \
-  --send no \
-  -- has_voted \
+retry_read "Has voted" -- has_voted \
   --proposal_id "$PROPOSAL_ID" \
   --nullifier "$NULLIFIER_HEX"

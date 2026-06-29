@@ -14,7 +14,8 @@ Important privacy note: zkBallot hides the voter identity witness and Merkle pat
 - UltraHonk VK/proof artifact generation with `--oracle_hash keccak`.
 - Soroban ballot contract:
   - admin-managed proposals and roots,
-  - stored VK constructor,
+  - stored VK constructor in the default build,
+  - optional `static-vk` build that embeds the VK into WASM to remove runtime VK storage reads,
   - UltraHonk proof verification,
   - public-input binding for root/domain/proposal/nullifier/vote,
   - nullifier-based double-vote prevention,
@@ -42,6 +43,7 @@ npm run build:artifacts
 npm run fixture:prove
 cargo test --manifest-path contracts/ballot/Cargo.toml
 (cd contracts/ballot && stellar contract build)
+(cd contracts/ballot && stellar contract build --features static-vk)
 npm run web:build
 ```
 
@@ -52,6 +54,7 @@ Expected highlights:
 - `npm run fixture:prove`: `Proof verified successfully`.
 - `cargo test`: 5 contract tests pass.
 - `stellar contract build`: emits `ballot.wasm`.
+- `stellar contract build --features static-vk`: emits the optimized static-VK verifier variant.
 
 ## Circuit public inputs
 
@@ -79,13 +82,28 @@ npm run deploy:testnet
 
 The deploy script builds artifacts, proves the fixture, builds WASM, and deploys with the VK passed to the constructor.
 
-Latest testnet demo deployment:
+To reproduce the optimized static-VK deployment:
+
+```bash
+STELLAR_BUILD_FEATURES=static-vk STELLAR_CONTRACT_ALIAS=zkballot-static-vk npm run deploy:testnet
+```
+
+Latest testnet demo deployment (`static-vk` verifier build):
+
+- Contract: `CBJOYLAFVEHPJY2UMDKJYOQHFVOFUI73ZSPYYG6NU7DNU5VZ47A6EQUQ`
+- WASM upload tx: <https://stellar.expert/explorer/testnet/tx/b6c4229880824c9046adcb0b5d380d21e156b8739669a1ceb40640dc21f84916>
+- Deploy tx: <https://stellar.expert/explorer/testnet/tx/bb66634cdc9e688f163372c2b676a5e6885c7f5dcfcf60da6ec19dc2e6373b2b>
+- Proposal tx: <https://stellar.expert/explorer/testnet/tx/fa20fd8eb95d74ddc4aafe645a53419606a6419f82ca045315352ef7742d75d1>
+
+Previous default stored-VK deployment:
 
 - Contract: `CBRDNA55CAQTAQD2VWIMILT224RSBGXBQ2ERYUD7XOZBTTGU37TX4ZJJ`
 - Deploy tx: <https://stellar.expert/explorer/testnet/tx/6aba7e821c09aa33bb02a4f6e74088e5f9688187d632969e24e09ac430349429>
 - Proposal tx: <https://stellar.expert/explorer/testnet/tx/1218755d63c577609aeb4d78fcf6874d2732fe9640eb120a0d9732eb1a3c91d4>
 
 The proposal/root state is live on testnet. The `cast_vote` path currently reaches Soroban simulation but fails with `HostError: Error(Budget, ExceededLimit)` while running the UltraHonk verifier. This is a testnet budget/verifier-cost blocker, not a native proof failure: `npm run fixture:prove` verifies the same proof successfully with `bb`.
+
+Optimization note: the `static-vk` build removes the contract storage read and VK fetch from the verification path, but `cast_vote` still exceeds the current testnet budget. This strongly indicates the dominant cost is inside UltraHonk verification itself, not the Merkle circuit size or the surrounding Soroban state logic.
 
 Run the state/proof demo:
 

@@ -5,6 +5,9 @@ use soroban_sdk::{
 #[cfg(not(test))]
 use ultrahonk_rust_verifier::{UltraHonkVerifier, PROOF_BYTES};
 
+#[cfg(all(feature = "static-vk", not(test)))]
+const STATIC_VK: &[u8] = include_bytes!("../../../../../artifacts/ballot/vk");
+
 #[contract]
 pub struct BallotContract;
 
@@ -239,6 +242,10 @@ impl BallotContract {
 
     #[cfg(not(test))]
     fn verify_ultrahonk(env: &Env, public_inputs: &Bytes, proof: &Bytes) -> Result<(), Error> {
+        #[cfg(feature = "static-vk")]
+        let vk_bytes = Bytes::from_slice(env, STATIC_VK);
+
+        #[cfg(not(feature = "static-vk"))]
         let vk_bytes: Bytes = env
             .storage()
             .instance()
