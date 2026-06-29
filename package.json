@@ -9,6 +9,8 @@
   "devDependencies": {
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@aztec/bb.js": "^0.87.0"
   }
 }
-
