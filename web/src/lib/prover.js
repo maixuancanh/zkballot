@@ -1,7 +1,7 @@
 export const PUBLIC_INPUT_ORDER = [
-  "merkleRoot",
-  "contractDomain",
-  "proposalId",
+  "merkle_root",
+  "contract_domain",
+  "proposal_id",
   "nullifier",
   "vote",
 ];

@@ -25,6 +25,10 @@ export PATH="$(dirname "$JQ_BIN"):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/
 : "${LOCALNET_CONTAINER:=zkballot-localnet}"
 : "${STELLAR_BUILD_FEATURES:=static-vk}"
 : "${STELLAR_NO_DEFAULT_FEATURES:=0}"
+: "${PROPOSAL_DEADLINE_SECONDS:=20}"
+: "${FINALIZE_WAIT_SECONDS:=$((PROPOSAL_DEADLINE_SECONDS + 4))}"
+: "${SKIP_FINALIZE:=0}"
+: "${INSTRUCTION_LEEWAY:=100000000}"
 
 if [[ "$START_LOCALNET" == "1" ]]; then
   if ! command -v docker >/dev/null 2>&1; then
@@ -35,8 +39,9 @@ if [[ "$START_LOCALNET" == "1" ]]; then
   sleep 8
 fi
 
+echo "Checking Stellar network: $STELLAR_NETWORK"
 if ! stellar network health --network "$STELLAR_NETWORK" 2>&1 | grep -q "Healthy"; then
-  echo "Local Stellar RPC is not healthy. Start it with:" >&2
+  echo "Stellar network '$STELLAR_NETWORK' is not healthy. For localnet, start it with:" >&2
   echo "  stellar container start local --protocol-version 26 --limits unlimited --name $LOCALNET_CONTAINER" >&2
   echo "Docker is currently required for the localnet container." >&2
   exit 1
@@ -84,12 +89,6 @@ CONTRACT_ID="$(
 echo "Contract: $CONTRACT_ID"
 
 META_HASH="$(printf 'zkBallot localnet proposal' | sha256sum | awk '{print $1}')"
-LEDGER_JSON="$(stellar ledger latest --network "$STELLAR_NETWORK" --output json)"
-NOW="$("$JQ_BIN" -r '.latestLedgerCloseTime // .timestamp // .ledgerCloseTime // 0' <<<"$LEDGER_JSON")"
-if [[ "$NOW" == "0" || "$NOW" == "null" ]]; then
-  NOW="$(date +%s)"
-fi
-DEADLINE="$((NOW + 20))"
 
 FIRST_FIXTURE="artifacts/e2e/voter0/fixture.json"
 for index in 0 1 2; do
@@ -105,6 +104,13 @@ for index in 0 1 2; do
     --new_root "$new_root" \
     --new_leaf_count "$((index + 1))" >/dev/null
 done
+
+LEDGER_JSON="$(stellar ledger latest --network "$STELLAR_NETWORK" --output json)"
+NOW="$("$JQ_BIN" -r '.latestLedgerCloseTime // .timestamp // .ledgerCloseTime // 0' <<<"$LEDGER_JSON")"
+if [[ "$NOW" == "0" || "$NOW" == "null" ]]; then
+  NOW="$(date +%s)"
+fi
+DEADLINE="$((NOW + PROPOSAL_DEADLINE_SECONDS))"
 
 CREATED_ID="$(
   stellar contract invoke \
@@ -127,7 +133,7 @@ for index in 0 1 2; do
     --network "$STELLAR_NETWORK" \
     --source "$STELLAR_SOURCE" \
     --id "$CONTRACT_ID" \
-    --instruction-leeway 1000000000 \
+    --instruction-leeway "$INSTRUCTION_LEEWAY" \
     -- cast_vote \
     --proposal_id "$PROPOSAL_ID" \
     --proof-file-path "artifacts/e2e/voter$index/proof" \
@@ -141,7 +147,7 @@ double_vote_output="$(
     --network "$STELLAR_NETWORK" \
     --source "$STELLAR_SOURCE" \
     --id "$CONTRACT_ID" \
-    --instruction-leeway 1000000000 \
+    --instruction-leeway "$INSTRUCTION_LEEWAY" \
     -- cast_vote \
     --proposal_id "$PROPOSAL_ID" \
     --proof-file-path artifacts/e2e/voter0/proof \
@@ -170,7 +176,12 @@ if [[ "$tally" != *'"yes":2'* || "$tally" != *'"no":1'* ]]; then
   exit 1
 fi
 
-sleep 24
+if [[ "$SKIP_FINALIZE" == "1" ]]; then
+  echo "Skipping finalize because SKIP_FINALIZE=1. Finalize after deadline $DEADLINE."
+  exit 0
+fi
+
+sleep "$FINALIZE_WAIT_SECONDS"
 final_tally="$(
   stellar contract invoke \
     --network "$STELLAR_NETWORK" \

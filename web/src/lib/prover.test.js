@@ -5,9 +5,9 @@ describe("prover helpers", () => {
   it("packs public inputs in the contract/circuit order", () => {
     expect(
       packPublicInputFields({
-        merkleRoot: "root",
-        contractDomain: "domain",
-        proposalId: "proposal",
+        merkle_root: "root",
+        contract_domain: "domain",
+        proposal_id: "proposal",
         nullifier: "nullifier",
         vote: "vote",
       }),

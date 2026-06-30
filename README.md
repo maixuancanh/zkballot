@@ -143,15 +143,22 @@ To reproduce the optimized static-VK deployment:
 STELLAR_BUILD_FEATURES=static-vk STELLAR_CONTRACT_ALIAS=zkballot-static-vk npm run deploy:testnet
 ```
 
-Latest testnet demo deployment (`static-vk` + Nethermind verifier preview):
+Latest testnet three-voter E2E (`static-vk` + Nethermind verifier preview):
 
-- Contract: `CDXG66ONYM42NOUO5VGYCF65XC7I4GUKTW32KHSUCQLQNED27XW4BX5Q`
-- WASM upload tx: <https://stellar.expert/explorer/testnet/tx/cf1c7c19cf0d8cacb813073b2b8fbb276cee012c38ceb2055e2b34cfe2a0f318>
-- Deploy tx: <https://stellar.expert/explorer/testnet/tx/5f277e3aa4a1092d264af80c290adcc0a2d502136c42bc8cebd3e21f932c23b6>
-- Register fixture voter tx: <https://stellar.expert/explorer/testnet/tx/be9bcdb4cdeb2ca5bda18fd636137f83283393bef49f3e9520a04e13db77b8be>
-- Create proposal tx: <https://stellar.expert/explorer/testnet/tx/2daee05a909b150131dfbd57d2a08fa4e70dbee585ea13285fb3728f201c35a7>
-- Cast fixture vote tx: <https://stellar.expert/explorer/testnet/tx/ec7c4954bd12fbd477935e08c85d05a2d5a081020dcf363dff346fa0e973b939>
-- Verified state: `tally = {"no":0,"yes":1}`, `has_voted = true`
+- Contract: `CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ`
+- Deploy tx: <https://stellar.expert/explorer/testnet/tx/1a9069576a2cff36b4ceb326bd1054ed2ef9c311c37df04268277db652f4de28>
+- Register voter txs:
+  - <https://stellar.expert/explorer/testnet/tx/4cb6125ff354577f864ed0f89fe1073eefc64e3178e6bc6142139605856c645b>
+  - <https://stellar.expert/explorer/testnet/tx/f0c12435a601be593fa5bc03c587a72a5812e4d7894ac87c6ad4be2dfa0a5c55>
+  - <https://stellar.expert/explorer/testnet/tx/1beb26702e41826c2582ab0275e5f71a3140ee77e014136e94de47ea7abc2748>
+- Create proposal tx: <https://stellar.expert/explorer/testnet/tx/dba6a51a928b88c77cc68ba67bfaa627e4c94f284c02aa8c3b0f1ef1eef2d2ad>
+- Cast vote txs:
+  - yes: <https://stellar.expert/explorer/testnet/tx/c01a73c7ac1cc9e015722a71f262bc0c627e81c7d01af00218677fba024d3c49>
+  - no: <https://stellar.expert/explorer/testnet/tx/b2e1cdc66e0e810cd1068fdebb80b122aef40223b4e924fc6773f64d4862a177>
+  - yes: <https://stellar.expert/explorer/testnet/tx/f45451e73a77e2019563c1a49f2816e235f16fc00841a7d1400190765b0893ab>
+- Double-vote check: replaying voter 0's nullifier is rejected with `NullifierUsed (#6)`.
+- Finalize tx: <https://stellar.expert/explorer/testnet/tx/4ffbcbd515c808097abf8c4f66df0121f2b937d9f52dde62bda0cdff53bbd9ad>
+- Verified final state: `finalized = true`, `tally = {"no":1,"yes":2}`
 
 Historical testnet demo deployment from before the Nethermind preview migration (`static-vk` verifier build):
 
@@ -166,7 +173,7 @@ Previous default stored-VK deployment:
 - Deploy tx: <https://stellar.expert/explorer/testnet/tx/6aba7e821c09aa33bb02a4f6e74088e5f9688187d632969e24e09ac430349429>
 - Proposal tx: <https://stellar.expert/explorer/testnet/tx/1218755d63c577609aeb4d78fcf6874d2732fe9640eb120a0d9732eb1a3c91d4>
 
-The historical proposal/root state is live on testnet. Before the Nethermind preview migration, the `cast_vote` path reached Soroban simulation but failed with `HostError: Error(Budget, ExceededLimit)` while running the earlier UltraHonk verifier. The current Nethermind-backed build has been verified both end-to-end on protocol-26 localnet with unlimited limits and on testnet for the single-fixture demo vote above.
+The historical proposal/root state is live on testnet. Before the Nethermind preview migration, the `cast_vote` path reached Soroban simulation but failed with `HostError: Error(Budget, ExceededLimit)` while running the earlier UltraHonk verifier. The current Nethermind-backed build has been verified both end-to-end on protocol-26 localnet with unlimited limits and on testnet for the three-voter lifecycle above.
 
 Optimization note: the `static-vk` build removes the contract storage read and VK fetch from the verification path. In the pre-migration testnet attempt this was not enough to fit the earlier verifier under testnet budget, which indicated the dominant cost was inside UltraHonk verification itself rather than Merkle state logic.
 
