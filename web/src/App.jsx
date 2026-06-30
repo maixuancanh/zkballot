@@ -1,121 +1,283 @@
 import "../src/styles.css";
 import { PUBLIC_INPUT_ORDER } from "./lib/prover.js";
 
-const fixture = {
-  treeDepth: "20",
-  merkleRoot:
-    "14460785374449162739442214995460005202646364416647747249593055484428816229179",
-  contractDomain: "987654",
-  proposalId: "1",
-  nullifier:
-    "11121500871050058422885258033156885195708409286151403101685507171941946327337",
-  vote: "1",
-  proofSha256: "91cd4240afd21366aa4b9552bb439c913b26623df66534dd950417b2f8e7b4af",
-  publicInputsSha256:
-    "f09fe1eee714ffe8315b27d79a1d9060abe17a1343a23de4378fe7ffbba9f926",
-};
+const EXPLORER = "https://stellar.expert/explorer/testnet";
+const CONTRACT_ID = "CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ";
 
-function Field({ label, value }) {
+const lifecycle = [
+  {
+    label: "Deploy static-VK ballot contract",
+    status: "submitted",
+    tx: "1a9069576a2cff36b4ceb326bd1054ed2ef9c311c37df04268277db652f4de28",
+  },
+  {
+    label: "Register voter 0 commitment",
+    status: "registered",
+    tx: "4cb6125ff354577f864ed0f89fe1073eefc64e3178e6bc6142139605856c645b",
+  },
+  {
+    label: "Register voter 1 commitment",
+    status: "registered",
+    tx: "f0c12435a601be593fa5bc03c587a72a5812e4d7894ac87c6ad4be2dfa0a5c55",
+  },
+  {
+    label: "Register voter 2 commitment",
+    status: "registered",
+    tx: "1beb26702e41826c2582ab0275e5f71a3140ee77e014136e94de47ea7abc2748",
+  },
+  {
+    label: "Create proposal with 3-leaf root snapshot",
+    status: "proposal #1",
+    tx: "dba6a51a928b88c77cc68ba67bfaa627e4c94f284c02aa8c3b0f1ef1eef2d2ad",
+  },
+  {
+    label: "Cast vote: YES",
+    status: "proof verified",
+    tx: "c01a73c7ac1cc9e015722a71f262bc0c627e81c7d01af00218677fba024d3c49",
+  },
+  {
+    label: "Cast vote: NO",
+    status: "proof verified",
+    tx: "b2e1cdc66e0e810cd1068fdebb80b122aef40223b4e924fc6773f64d4862a177",
+  },
+  {
+    label: "Cast vote: YES",
+    status: "proof verified",
+    tx: "f45451e73a77e2019563c1a49f2816e235f16fc00841a7d1400190765b0893ab",
+  },
+  {
+    label: "Finalize proposal after deadline",
+    status: "finalized",
+    tx: "4ffbcbd515c808097abf8c4f66df0121f2b937d9f52dde62bda0cdff53bbd9ad",
+  },
+];
+
+const proofFacts = [
+  ["Circuit", "Noir ballot membership circuit"],
+  ["Proof system", "UltraHonk, oracle_hash = keccak"],
+  ["Verifier", "Nethermind Soroban UltraHonk verifier"],
+  ["SDK", "Soroban SDK 26.1.0"],
+  ["Tree depth", "20"],
+  ["Contract domain", "987654"],
+];
+
+const commands = [
+  "npm test",
+  "nargo test --program-dir circuits/ballot",
+  "npm run fixture:prove",
+  "cargo test --manifest-path contracts/ballot/Cargo.toml",
+  "npm --prefix web run build",
+];
+
+function shortHash(hash) {
+  return `${hash.slice(0, 10)}…${hash.slice(-8)}`;
+}
+
+function TxLink({ tx }) {
   return (
-    <div className="field">
+    <a href={`${EXPLORER}/tx/${tx}`} target="_blank" rel="noreferrer">
+      {shortHash(tx)}
+    </a>
+  );
+}
+
+function Stat({ label, value, tone = "default" }) {
+  return (
+    <div className={`stat ${tone}`}>
       <span>{label}</span>
-      <code>{value}</code>
+      <strong>{value}</strong>
     </div>
   );
 }
 
-function Screen({ number, title, children }) {
+function SectionTitle({ title, copy }) {
   return (
-    <article className="card">
-      <p className="eyebrow">Screen {number}</p>
+    <div className="section-title">
       <h2>{title}</h2>
-      {children}
-    </article>
+      <p>{copy}</p>
+    </div>
   );
 }
 
 export default function App() {
   return (
     <main className="shell">
+      <nav className="topbar" aria-label="Demo navigation">
+        <div className="brand">zkBallot</div>
+        <div className="navlinks">
+          <a href="#evidence">Evidence</a>
+          <a href="#zk-flow">ZK flow</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#reproduce">Reproduce</a>
+        </div>
+      </nav>
+
       <section className="hero">
-        <p className="eyebrow">Stellar + Noir + UltraHonk</p>
-        <h1>zkBallot</h1>
-        <p className="lede">
-          Anonymous binary voting with a public live tally. The proof hides the
-          voter identity secret and Merkle path; the vote itself is a public
-          input by design.
-        </p>
-        <div className="badges">
-          <span>Depth-{fixture.treeDepth} anonymity set</span>
-          <span>Proposal-scoped nullifier</span>
-          <span>Public yes/no tally</span>
+        <div className="hero-copy">
+          <h1>Anonymous eligibility. Public tally. Verified on Stellar testnet.</h1>
+          <p className="lede">
+            zkBallot lets a voter prove they belong to an eligible Merkle set without revealing
+            which identity voted. The selected vote remains public so Soroban can update a
+            transparent yes/no tally.
+          </p>
+          <div className="actions">
+            <a className="button primary" href={`${EXPLORER}/contract/${CONTRACT_ID}`} target="_blank" rel="noreferrer">
+              Open contract on Stellar Expert
+            </a>
+            <a className="button" href="#evidence">
+              View testnet proof trail
+            </a>
+          </div>
+        </div>
+
+        <aside className="result-card" aria-label="Latest verified testnet result">
+          <div className="result-head">
+            <span>Latest testnet E2E</span>
+            <strong>Finalized</strong>
+          </div>
+          <code>{CONTRACT_ID}</code>
+          <div className="stats">
+            <Stat label="YES" value="2" tone="yes" />
+            <Stat label="NO" value="1" tone="no" />
+            <Stat label="Replay" value="Rejected" tone="warn" />
+          </div>
+          <div className="verified-state">
+            Verified final state: <strong>finalized = true</strong>,{" "}
+            <strong>tally = {"{\"no\":1,\"yes\":2}"}</strong>
+          </div>
+          <p>
+            Three voters cast <strong>yes / no / yes</strong>. Replaying voter 0’s nullifier
+            failed with <strong>NullifierUsed (#6)</strong>.
+          </p>
+        </aside>
+      </section>
+
+      <section id="evidence" className="panel evidence-panel">
+        <SectionTitle
+          title="Onchain evidence trail"
+          copy="Every row links to the public Stellar testnet transaction used in the verified three-voter lifecycle."
+        />
+        <div className="timeline">
+          {lifecycle.map((item, index) => (
+            <article className="timeline-row" key={item.tx}>
+              <div className="step-index">{String(index + 1).padStart(2, "0")}</div>
+              <div>
+                <h3>{item.label}</h3>
+                <p>{item.status}</p>
+              </div>
+              <TxLink tx={item.tx} />
+            </article>
+          ))}
+        </div>
+        <div className="rejection-proof">
+          <div>
+            <h3>Double-vote check</h3>
+            <p>
+              Replaying voter 0’s proposal nullifier was simulated against the same contract and
+              rejected before submission with <strong>NullifierUsed (#6)</strong>.
+            </p>
+          </div>
+          <code>proposal_id = 1 · nullifier replay blocked</code>
         </div>
       </section>
 
-      <section className="card warning">
-        <h2>Privacy boundary</h2>
-        <p>
-          This demo is not an encrypted tally or sealed-ballot system. It proves
-          eligibility anonymously, but publishes <code>vote</code> as a circuit
-          public input so the Soroban contract can update transparent counts.
-        </p>
+      <section id="zk-flow" className="grid two">
+        <article className="panel">
+          <SectionTitle
+            title="What the zero knowledge proof does"
+            copy="The proof is load-bearing: cast_vote only mutates tally after proof verification succeeds."
+          />
+          <div className="flow">
+            <div className="flow-node private">
+              <span>Private witness</span>
+              identity secret · trapdoor · Merkle path
+            </div>
+            <div className="arrow">→</div>
+            <div className="flow-node">
+              <span>Noir circuit</span>
+              membership · binary vote · proposal nullifier
+            </div>
+            <div className="arrow">→</div>
+            <div className="flow-node">
+              <span>Soroban verifier</span>
+              Nethermind UltraHonk verifier checks proof onchain
+            </div>
+            <div className="arrow">→</div>
+            <div className="flow-node public">
+              <span>Public result</span>
+              yes/no tally and spent nullifier
+            </div>
+          </div>
+        </article>
+
+        <article className="panel facts">
+          <SectionTitle
+            title="Verifier facts"
+            copy="These are the concrete proof and contract settings used by the current build."
+          />
+          {proofFacts.map(([label, value]) => (
+            <div className="fact" key={label}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
+        </article>
       </section>
 
-      <section className="grid">
-        <Screen number="1" title="Connect">
-          <p>
-            Connect to the expected Stellar network before sending any
-            transaction. The helper rejects wallet/network mismatches.
-          </p>
-        </Screen>
-
-        <Screen number="2" title="Register identity">
-          <p>
-            Generate local browser secrets, store them locally with an export
-            warning, and register only the Poseidon2 commitment/root on-chain.
-          </p>
-        </Screen>
-
-        <Screen number="3" title="Vote">
-          <p>
-            Generate a Noir/UltraHonk proof of membership and submit the proof
-            plus nullifier and public vote. The contract reconstructs public
-            inputs in this order:
-          </p>
-          <ol className="steps">
+      <section className="grid two">
+        <article className="panel">
+          <SectionTitle
+            title="Public input order"
+            copy="The contract reconstructs this exact order from proposal state and call arguments."
+          />
+          <ol className="input-order">
             {PUBLIC_INPUT_ORDER.map((key) => (
-              <li key={key}>{key}</li>
+              <li key={key}>
+                <code>{key}</code>
+              </li>
             ))}
           </ol>
-        </Screen>
+        </article>
 
-        <Screen number="4" title="Results">
-          <p>
-            The tally is public and live. Reusing the same proposal nullifier is
-            rejected, while each proposal gets its own nullifier domain.
-          </p>
-        </Screen>
+        <article id="reproduce" className="panel terminal-card">
+          <SectionTitle title="Reproduce locally" copy="The README contains the complete setup and testnet notes." />
+          <pre>
+            {commands.map((cmd) => `$ ${cmd}`).join("\n")}
+          </pre>
+        </article>
       </section>
 
-      <section className="grid">
-        <article className="card">
-          <h2>Proof fixture</h2>
-          <Field label="Merkle root" value={fixture.merkleRoot} />
-          <Field label="Contract domain" value={fixture.contractDomain} />
-          <Field label="Proposal" value={fixture.proposalId} />
-          <Field label="Nullifier" value={fixture.nullifier} />
-          <Field label="Public vote" value={fixture.vote === "1" ? "YES (1)" : "NO (0)"} />
-        </article>
-
-        <article className="card hashes">
-          <h2>Reproducible artifacts</h2>
-          <Field label="proof sha256" value={fixture.proofSha256} />
-          <Field label="public_inputs sha256" value={fixture.publicInputsSha256} />
-          <p>
-            Rebuild locally with <code>npm run fixture:prove</code> and{" "}
-            <code>npm run build:artifacts</code>.
-          </p>
-        </article>
+      <section id="privacy" className="panel privacy">
+        <SectionTitle
+          title="Honest privacy boundary"
+          copy="This is anonymous eligibility with transparent results, not encrypted tallying."
+        />
+        <div className="privacy-grid">
+          <div>
+            <h3>Hidden by the proof</h3>
+            <ul>
+              <li>Identity secret and trapdoor</li>
+              <li>Merkle membership path</li>
+              <li>Which registered leaf produced the vote</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Public on Stellar</h3>
+            <ul>
+              <li>Vote value: 0 or 1</li>
+              <li>Proposal-scoped nullifier</li>
+              <li>Live yes/no tally and finalized result</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Not claimed</h3>
+            <ul>
+              <li>No sealed ballots</li>
+              <li>No hidden interim tally</li>
+              <li>No coercion resistance</li>
+            </ul>
+          </div>
+        </div>
       </section>
     </main>
   );
