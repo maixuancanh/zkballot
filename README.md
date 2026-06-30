@@ -19,7 +19,7 @@ transparent binary tally.
 | Item | Link or result |
 | --- | --- |
 | Web evidence dashboard | [zkballot-mu.vercel.app](https://zkballot-mu.vercel.app) |
-| Demo video | [zkballot-demo-video.mp4](./zkballot-demo-video.mp4) — 2:04.8, recorded from the working evidence dashboard |
+| Demo video | [YouTube walkthrough](https://youtu.be/-_nXSBEjhtc) — 2:04.8, recorded from the working evidence dashboard |
 | Stellar network | Testnet |
 | Deployed contract | [`CDDW...Z4V6`](https://stellar.expert/explorer/testnet/contract/CDDW36USNVE3Y2URBH2LXCCLFLFG65BWMHKEXUE23EMBBKOYTKA6Z4V6) |
 | Verified lifecycle | 3 voters: `yes / no / yes`; replay rejected; finalized tally `{"no":1,"yes":2}` |
@@ -648,7 +648,11 @@ The public Vercel deployment is a static Vite build of the same dashboard.
 
 ## Demo video
 
-The submission video is checked in at
+The submission video is available on YouTube:
+
+[https://youtu.be/-_nXSBEjhtc](https://youtu.be/-_nXSBEjhtc)
+
+The source recording is also checked in at
 [`zkballot-demo-video.mp4`](./zkballot-demo-video.mp4).
 
 - Duration: **124.800 seconds** (2:04.8).
