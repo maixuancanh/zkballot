@@ -18,3 +18,4 @@ public_inputs
 !artifacts/ballot/vk
 !artifacts/fixture/proof
 !artifacts/fixture/public_inputs
+artifacts/e2e/

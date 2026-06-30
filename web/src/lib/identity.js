@@ -1,0 +1,33 @@
+const STORAGE_KEY = "zkballot.identity.v1";
+
+function randomFieldHex(randomBytes) {
+  const bytes = randomBytes ?? crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function createIdentity(randomBytes) {
+  return {
+    identitySecret: randomFieldHex(randomBytes?.secret),
+    identityTrapdoor: randomFieldHex(randomBytes?.trapdoor),
+    createdAt: new Date(0).toISOString(),
+  };
+}
+
+export function saveIdentity(storage, identity) {
+  storage.setItem(STORAGE_KEY, JSON.stringify(identity));
+}
+
+export function loadIdentity(storage) {
+  const raw = storage.getItem(STORAGE_KEY);
+  return raw ? JSON.parse(raw) : null;
+}
+
+export function getOrCreateIdentity(storage, randomBytes) {
+  const existing = loadIdentity(storage);
+  if (existing) return existing;
+  const identity = createIdentity(randomBytes);
+  saveIdentity(storage, identity);
+  return identity;
+}
+
+export { STORAGE_KEY };

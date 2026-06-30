@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CIRCUIT_DIR="$ROOT_DIR/circuits/ballot"
 ARTIFACT_DIR="$ROOT_DIR/artifacts/ballot"
 JQ_BIN="$ROOT_DIR/tools/bin/jq"
+BB_BIN="$HOME/.bb/bb"
 
 if [[ ! -x "$JQ_BIN" ]]; then
   mkdir -p "$(dirname "$JQ_BIN")"
@@ -13,8 +14,7 @@ if [[ ! -x "$JQ_BIN" ]]; then
     -o "$JQ_BIN"
   chmod +x "$JQ_BIN"
 fi
-export PATH="$(dirname "$JQ_BIN"):$PATH"
-export PATH="$(dirname "$JQ_BIN"):$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.nargo/bin"
+export PATH="$(dirname "$JQ_BIN"):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:$HOME/.nargo/bin:$HOME/.local/bin"
 
 mkdir -p "$ARTIFACT_DIR"
 
@@ -22,7 +22,7 @@ mkdir -p "$ARTIFACT_DIR"
   cd "$CIRCUIT_DIR"
   nargo test
   nargo compile
-  bb write_vk \
+  "$BB_BIN" write_vk \
     --scheme ultra_honk \
     --oracle_hash keccak \
     --bytecode_path target/ballot.json \

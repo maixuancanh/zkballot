@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { fieldToBytes, u64ToField } from "./encoding.js";
 import {
   buildTree,
@@ -10,12 +10,15 @@ import {
   verifyPath,
 } from "./merkle.js";
 
-const TREE_DEPTH = 4;
+const TREE_DEPTH = Number(process.env.TREE_DEPTH ?? "20");
 const DOMAIN_ZKBALLOT = 1514885697n;
 
 const rootDir = new URL("..", import.meta.url).pathname;
 const circuitDir = join(rootDir, "circuits", "ballot");
-const outDir = join(rootDir, "artifacts", "fixture");
+const fixtureDirInput = process.env.FIXTURE_DIR ?? "artifacts/fixture";
+const outDir = isAbsolute(fixtureDirInput)
+  ? fixtureDirInput
+  : join(rootDir, fixtureDirInput);
 
 function field(value: bigint): string {
   return `"${value.toString()}"`;
@@ -35,17 +38,44 @@ function concatBytes(fields: readonly bigint[]): Uint8Array {
   return out;
 }
 
+function fieldHex(value: bigint): string {
+  return Buffer.from(fieldToBytes(value)).toString("hex");
+}
+
 await initPoseidon();
 
-const identitySecret = 111n;
-const identityTrapdoor = 222n;
-const contractDomain = u64ToField(987654n);
-const proposalId = u64ToField(7n);
-const vote = 1n;
+function parseBigIntList(name: string, fallback: readonly bigint[]): bigint[] {
+  const raw = process.env[name];
+  if (!raw) return [...fallback];
+  return raw.split(",").map((value) => BigInt(value.trim()));
+}
 
-const commitment = identityCommitment(identitySecret, identityTrapdoor);
-const tree = buildTree([commitment], TREE_DEPTH);
-const proof = merkleProof(tree, 0);
+const identitySecrets = parseBigIntList("IDENTITY_SECRETS", [111n]);
+const identityTrapdoors = parseBigIntList("IDENTITY_TRAPDOORS", [222n]);
+if (identitySecrets.length !== identityTrapdoors.length) {
+  throw new Error("IDENTITY_SECRETS and IDENTITY_TRAPDOORS must have the same length");
+}
+
+const proverIndex = Number(process.env.PROVER_INDEX ?? "0");
+if (!Number.isInteger(proverIndex) || proverIndex < 0 || proverIndex >= identitySecrets.length) {
+  throw new Error("PROVER_INDEX is outside the identity list");
+}
+
+const identitySecret = identitySecrets[proverIndex];
+const identityTrapdoor = identityTrapdoors[proverIndex];
+const contractDomain = u64ToField(BigInt(process.env.CONTRACT_DOMAIN ?? "987654"));
+const proposalId = u64ToField(BigInt(process.env.PROPOSAL_ID ?? "1"));
+const vote = BigInt(process.env.VOTE ?? "1");
+
+const commitments = identitySecrets.map((secret, index) =>
+  identityCommitment(secret, identityTrapdoors[index]),
+);
+const commitment = commitments[proverIndex];
+const tree = buildTree(commitments, TREE_DEPTH);
+const proof = merkleProof(tree, proverIndex);
+const appendRoots = commitments.map((_, index) =>
+  buildTree(commitments.slice(0, index + 1), TREE_DEPTH).root,
+);
 
 if (!verifyPath(commitment, proof.path, proof.indices, proof.root)) {
   throw new Error("generated Merkle proof is invalid");
@@ -84,15 +114,25 @@ writeFileSync(
   JSON.stringify(
     {
       treeDepth: TREE_DEPTH,
+      proverIndex,
+      identityCount: identitySecrets.length,
       identitySecret: identitySecret.toString(),
       identityTrapdoor: identityTrapdoor.toString(),
       commitment: commitment.toString(),
+      commitmentHex: fieldHex(commitment),
+      commitments: commitments.map((value) => value.toString()),
+      commitmentsHex: commitments.map(fieldHex),
+      appendRoots: appendRoots.map((value) => value.toString()),
+      appendRootsHex: appendRoots.map(fieldHex),
       merkleRoot: proof.root.toString(),
+      merkleRootHex: fieldHex(proof.root),
       contractDomain: contractDomain.toString(),
       proposalId: proposalId.toString(),
       nullifier: nullifier.toString(),
+      nullifierHex: fieldHex(nullifier),
       vote: vote.toString(),
       publicInputs: publicInputs.map((value) => value.toString()),
+      publicInputsHex: publicInputs.map(fieldHex),
     },
     null,
     2,

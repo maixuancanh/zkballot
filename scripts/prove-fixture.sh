@@ -3,8 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CIRCUIT_DIR="$ROOT_DIR/circuits/ballot"
-FIXTURE_DIR="$ROOT_DIR/artifacts/fixture"
+FIXTURE_DIR="${FIXTURE_DIR:-$ROOT_DIR/artifacts/fixture}"
+if [[ "$FIXTURE_DIR" != /* ]]; then
+  FIXTURE_DIR="$ROOT_DIR/$FIXTURE_DIR"
+fi
 JQ_BIN="$ROOT_DIR/tools/bin/jq"
+BB_BIN="$HOME/.bb/bb"
 
 if [[ ! -x "$JQ_BIN" ]]; then
   mkdir -p "$(dirname "$JQ_BIN")"
@@ -13,22 +17,28 @@ if [[ ! -x "$JQ_BIN" ]]; then
     -o "$JQ_BIN"
   chmod +x "$JQ_BIN"
 fi
-export PATH="$(dirname "$JQ_BIN"):$PATH"
-export PATH="$(dirname "$JQ_BIN"):$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.nargo/bin"
+export PATH="$(dirname "$JQ_BIN"):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:$HOME/.nargo/bin:$HOME/.local/bin"
 
-npm run fixture:inputs
+"$HOME/.nvm/versions/node/v20.20.2/bin/node" \
+  "$ROOT_DIR/node_modules/tsx/dist/cli.mjs" \
+  "$ROOT_DIR/scripts/generate-proof-inputs.ts"
 
 (
   cd "$CIRCUIT_DIR"
   nargo compile
+  "$BB_BIN" write_vk \
+    --scheme ultra_honk \
+    --oracle_hash keccak \
+    --bytecode_path target/ballot.json \
+    --output_path target
   nargo execute ballot_witness
-  bb prove \
+  "$BB_BIN" prove \
     --scheme ultra_honk \
     --oracle_hash keccak \
     --bytecode_path target/ballot.json \
     --witness_path target/ballot_witness.gz \
     --output_path target
-  bb verify \
+  "$BB_BIN" verify \
     --scheme ultra_honk \
     --oracle_hash keccak \
     --vk_path target/vk \

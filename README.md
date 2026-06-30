@@ -13,14 +13,16 @@ Important privacy note: zkBallot hides the voter identity witness and Merkle pat
 - TypeScript utilities for canonical BN254 field encoding and Poseidon2 Merkle trees.
 - UltraHonk VK/proof artifact generation with `--oracle_hash keccak`.
 - Soroban ballot contract:
-  - admin-managed proposals and roots,
+  - admin-authorized append-only voter registry,
+  - proposal root snapshots and deadlines,
   - stored VK constructor in the default build,
   - optional `static-vk` build that embeds the VK into WASM to remove runtime VK storage reads,
   - UltraHonk proof verification,
-  - public-input binding for root/domain/proposal/nullifier/vote,
+  - contract-side public-input reconstruction for root/domain/proposal/nullifier/vote,
   - nullifier-based double-vote prevention,
+  - finalization after the proposal deadline,
   - public yes/no tally.
-- Minimal React demo UI that states the privacy boundary honestly.
+- React demo UI and helper tests that state the privacy boundary honestly.
 
 ## Verified toolchain
 
@@ -30,12 +32,14 @@ Important privacy note: zkBallot hides the voter identity witness and Merkle pat
 - Barretenberg 0.87.0
 - Node.js 20.20.2
 - Rust 1.95.0
+- Docker Engine 29.6.1 in WSL for localnet
 
 ## Reproduce locally
 
 Run these from the repo root in WSL:
 
 ```bash
+export PATH="$PWD/tools/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:$HOME/.nargo/bin:$HOME/.local/bin"
 npm install
 npm test
 nargo test --program-dir circuits/ballot
@@ -44,15 +48,17 @@ npm run fixture:prove
 cargo test --manifest-path contracts/ballot/Cargo.toml
 (cd contracts/ballot && stellar contract build)
 (cd contracts/ballot && stellar contract build --features static-vk)
-npm run web:build
+npm --prefix web test
+npm --prefix web run typecheck
+npm --prefix web run build
 ```
 
 Expected highlights:
 
 - `nargo test`: 6 tests pass.
-- `npm test`: encoding/Merkle tests pass.
+- `npm test`: encoding/Merkle/web helper tests pass.
 - `npm run fixture:prove`: `Proof verified successfully`.
-- `cargo test`: 5 contract tests pass.
+- `cargo test`: 7 contract tests pass.
 - `stellar contract build`: emits `ballot.wasm`.
 - `stellar contract build --features static-vk`: emits the optimized static-VK verifier variant.
 
@@ -68,7 +74,31 @@ The public input order is fixed:
 
 Each field is encoded as one canonical 32-byte big-endian BN254 scalar.
 
-The checked-in demo circuit uses a small Merkle depth (`4`) to keep the testnet verifier path lightweight. Increase `TREE_DEPTH` in the Noir circuit and fixture generator for larger registries, then regenerate VK/proofs and redeploy.
+The checked-in circuit uses `TREE_DEPTH = 20`, matching the implementation plan. Proof generation requires the Linux `jq`, `base64`, and `gunzip` binaries to resolve before Windows shims in WSL; the project scripts set a clean PATH for this.
+
+## Localnet E2E
+
+The full plan-level E2E runs on Stellar localnet with protocol 26 and unlimited Soroban limits:
+
+```bash
+stellar container start local --protocol-version 26 --limits unlimited --name zkballot-localnet
+npm run e2e:localnet
+```
+
+The E2E script:
+
+1. builds the depth-20 Noir circuit and static-VK Soroban contract;
+2. generates three UltraHonk proofs for three identities;
+3. registers three voter commitments and snapshots the root in a proposal;
+4. casts `yes/no/yes`;
+5. rejects a repeated nullifier; and
+6. finalizes to `{"no":1,"yes":2}`.
+
+Last verified localnet result:
+
+```text
+zkBallot localnet E2E passed: yes/no/yes, double-vote rejected, finalized to (2, 1).
+```
 
 ## Testnet deploy
 

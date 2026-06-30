@@ -14,13 +14,23 @@ fi
 : "${STELLAR_NETWORK:=testnet}"
 : "${STELLAR_SOURCE:?Set STELLAR_SOURCE}"
 : "${BALLOT_ID:?Set BALLOT_ID}"
+: "${PROPOSAL_ID:=1}"
 
-PROPOSAL_ID=7
-TITLE_JSON="/tmp/zkballot-title.json"
-ROOT_HEX="$(xxd -p -c 256 -l 32 artifacts/fixture/public_inputs)"
-NULLIFIER_HEX="$(xxd -p -c 256 -s 96 -l 32 artifacts/fixture/public_inputs)"
+JQ_BIN="$ROOT_DIR/tools/bin/jq"
+if [[ ! -x "$JQ_BIN" ]]; then
+  mkdir -p "$(dirname "$JQ_BIN")"
+  curl -L --fail \
+    https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 \
+    -o "$JQ_BIN"
+  chmod +x "$JQ_BIN"
+fi
 
-printf '%s\n' '"Fixture proposal"' > "$TITLE_JSON"
+FIXTURE_JSON="artifacts/fixture/fixture.json"
+COMMITMENT_HEX="$("$JQ_BIN" -r '.commitmentHex' "$FIXTURE_JSON")"
+ROOT_HEX="$("$JQ_BIN" -r '.merkleRootHex' "$FIXTURE_JSON")"
+NULLIFIER_HEX="$("$JQ_BIN" -r '.nullifierHex' "$FIXTURE_JSON")"
+META_HASH="$(printf 'Fixture proposal' | sha256sum | awk '{print $1}')"
+DEADLINE="$(( $(date +%s) + 86400 ))"
 
 invoke_read() {
   stellar contract invoke \
@@ -52,8 +62,23 @@ echo "Proposal: $PROPOSAL_ID"
 echo "Root: $ROOT_HEX"
 echo "Nullifier: $NULLIFIER_HEX"
 
-if invoke_read -- proposal \
-  --proposal_id "$PROPOSAL_ID" >/tmp/zkballot-proposal.json 2>/tmp/zkballot-proposal.err; then
+if invoke_read -- commitment_index --commitment "$COMMITMENT_HEX" >/tmp/zkballot-commitment-index.json 2>/tmp/zkballot-commitment-index.err; then
+  echo "Fixture voter already registered:"
+  cat /tmp/zkballot-commitment-index.json
+else
+  echo "Registering fixture voter..."
+  stellar contract invoke \
+    --network "$STELLAR_NETWORK" \
+    --source "$STELLAR_SOURCE" \
+    --id "$BALLOT_ID" \
+    -- register_voter \
+    --commitment "$COMMITMENT_HEX" \
+    --index 0 \
+    --new_root "$ROOT_HEX" \
+    --new_leaf_count 1
+fi
+
+if invoke_read -- get_proposal --proposal_id "$PROPOSAL_ID" >/tmp/zkballot-proposal.json 2>/tmp/zkballot-proposal.err; then
   echo "Proposal already exists:"
   cat /tmp/zkballot-proposal.json
 else
@@ -63,9 +88,8 @@ else
     --source "$STELLAR_SOURCE" \
     --id "$BALLOT_ID" \
     -- create_proposal \
-    --proposal_id "$PROPOSAL_ID" \
-    --title-file-path "$TITLE_JSON" \
-    --root "$ROOT_HEX"
+    --meta_hash "$META_HASH" \
+    --deadline "$DEADLINE"
 fi
 
 echo "Casting fixture vote..."
@@ -77,11 +101,9 @@ stellar contract invoke \
   --instruction-leeway 100000000 \
   -- cast_vote \
   --proposal_id "$PROPOSAL_ID" \
-  --merkle_root "$ROOT_HEX" \
+  --proof-file-path artifacts/fixture/proof \
   --nullifier "$NULLIFIER_HEX" \
-  --vote 1 \
-  --public_inputs-file-path artifacts/fixture/public_inputs \
-  --proof-file-path artifacts/fixture/proof
+  --vote 1
 CAST_STATUS=$?
 set -e
 

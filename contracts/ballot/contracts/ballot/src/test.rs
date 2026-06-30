@@ -1,17 +1,24 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Bytes, BytesN, Env, String};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    Address, Bytes, BytesN, Env,
+};
 
-fn setup() -> (Env, BallotContractClient<'static>, Address, BytesN<32>) {
+fn setup() -> (Env, BallotContractClient<'static>, Address) {
     let env = Env::default();
     env.mock_all_auths();
+    env.ledger().with_mut(|li| li.timestamp = 1_000);
     let admin = Address::generate(&env);
     let vk = Bytes::from_slice(&env, &[1, 2, 3]);
     let contract_id = env.register(BallotContract, (&admin, &987_654_u64, &vk));
     let client = BallotContractClient::new(&env, &contract_id);
-    let root = BytesN::from_array(&env, &[7; 32]);
-    (env, client, admin, root)
+    (env, client, admin)
+}
+
+fn bytes32(env: &Env, value: u8) -> BytesN<32> {
+    BytesN::from_array(env, &[value; 32])
 }
 
 fn field_bytes_from_u64(env: &Env, value: u64) -> Bytes {
@@ -26,7 +33,7 @@ fn field_bytes_from_u32(env: &Env, value: u32) -> Bytes {
     Bytes::from_array(env, &bytes)
 }
 
-fn public_inputs(
+fn expected_public_inputs(
     env: &Env,
     root: &BytesN<32>,
     proposal_id: u64,
@@ -42,86 +49,158 @@ fn public_inputs(
     out
 }
 
+fn register_one(env: &Env, client: &BallotContractClient<'static>, value: u8) -> RootState {
+    client.register_voter(&bytes32(env, value), &0, &bytes32(env, value + 10), &1)
+}
+
+fn create_proposal(
+    env: &Env,
+    client: &BallotContractClient<'static>,
+    deadline: u64,
+) -> u64 {
+    client.create_proposal(&bytes32(env, 55), &deadline)
+}
+
 #[test]
-fn constructor_exposes_admin_domain_and_vk() {
-    let (env, client, admin, _root) = setup();
+fn constructor_exposes_admin_domain_vk_and_empty_root() {
+    let (env, client, admin) = setup();
 
     assert_eq!(client.admin(), admin);
     assert_eq!(client.contract_domain(), 987_654);
     assert_eq!(client.verifying_key(), Bytes::from_slice(&env, &[1, 2, 3]));
+    assert_eq!(
+        client.get_root(),
+        RootState {
+            root: bytes32(&env, 0),
+            leaf_count: 0
+        }
+    );
 }
 
 #[test]
-fn admin_creates_proposal_and_registers_root() {
-    let (env, client, _admin, root) = setup();
+fn admin_registers_append_only_voters() {
+    let (env, client, _admin) = setup();
 
-    let proposal = client
-        .try_create_proposal(&1, &String::from_str(&env, "Ship zkBallot"), &root)
+    let root = client
+        .try_register_voter(&bytes32(&env, 1), &0, &bytes32(&env, 10), &1)
         .unwrap()
         .unwrap();
+    assert_eq!(
+        root,
+        RootState {
+            root: bytes32(&env, 10),
+            leaf_count: 1
+        }
+    );
+    assert_eq!(client.commitment_index(&bytes32(&env, 1)), 0);
 
-    assert_eq!(proposal.id, 1);
-    assert_eq!(proposal.active, true);
-    assert_eq!(client.root_exists(&root), true);
-    assert_eq!(client.tally(&1), Tally { yes: 0, no: 0 });
+    let duplicate = client.try_register_voter(&bytes32(&env, 1), &1, &bytes32(&env, 11), &2);
+    assert_eq!(duplicate, Err(Ok(Error::CommitmentExists)));
+
+    let non_sequential =
+        client.try_register_voter(&bytes32(&env, 2), &3, &bytes32(&env, 12), &2);
+    assert_eq!(non_sequential, Err(Ok(Error::NonSequentialIndex)));
+
+    let non_monotonic =
+        client.try_register_voter(&bytes32(&env, 2), &1, &bytes32(&env, 12), &1);
+    assert_eq!(non_monotonic, Err(Ok(Error::NonMonotonicLeafCount)));
 }
 
 #[test]
-fn cast_vote_updates_public_tally_and_blocks_double_vote() {
-    let (env, client, _admin, root) = setup();
-    client.create_proposal(&1, &String::from_str(&env, "Ship zkBallot"), &root);
+fn proposal_snapshots_current_root_and_rejects_past_deadline() {
+    let (env, client, _admin) = setup();
+    let root = register_one(&env, &client, 1);
 
-    let nullifier = BytesN::from_array(&env, &[9; 32]);
-    let public_inputs = public_inputs(&env, &root, 1, &nullifier, 1);
+    let proposal_id = create_proposal(&env, &client, 2_000);
+    let proposal = client.get_proposal(&proposal_id);
+    assert_eq!(proposal.id, 1);
+    assert_eq!(proposal.root, root.root);
+    assert_eq!(proposal.leaf_count, 1);
+    assert_eq!(proposal.deadline, 2_000);
+    assert_eq!(proposal.finalized, false);
+    assert_eq!(client.tally(&proposal_id), Tally { yes: 0, no: 0 });
+
+    let past = client.try_create_proposal(&bytes32(&env, 56), &999);
+    assert_eq!(past, Err(Ok(Error::PastDeadline)));
+}
+
+#[test]
+fn cast_vote_reconstructs_public_inputs_updates_tally_and_blocks_replay() {
+    let (env, client, _admin) = setup();
+    let root = register_one(&env, &client, 1).root;
+    let proposal_id = create_proposal(&env, &client, 2_000);
+    let nullifier = bytes32(&env, 9);
     let proof = Bytes::from_slice(&env, &[42]);
 
-    let tally = client
-        .try_cast_vote(&1, &root, &nullifier, &1, &public_inputs, &proof)
-        .unwrap()
-        .unwrap();
-    assert_eq!(tally, Tally { yes: 1, no: 0 });
-    assert_eq!(client.has_voted(&1, &nullifier), true);
+    assert_eq!(
+        client.pack_public_inputs_view(&proposal_id, &nullifier, &1),
+        expected_public_inputs(&env, &root, proposal_id, &nullifier, 1)
+    );
 
-    let second = client.try_cast_vote(&1, &root, &nullifier, &1, &public_inputs, &proof);
+    let tally = client.cast_vote(&proposal_id, &proof, &nullifier, &1);
+    assert_eq!(tally, Tally { yes: 1, no: 0 });
+    assert_eq!(client.has_voted(&proposal_id, &nullifier), true);
+
+    let second = client.try_cast_vote(&proposal_id, &proof, &nullifier, &1);
     assert_eq!(second, Err(Ok(Error::NullifierUsed)));
 }
 
 #[test]
-fn cast_vote_rejects_invalid_vote_and_unknown_root() {
-    let (env, client, _admin, root) = setup();
-    client.create_proposal(&1, &String::from_str(&env, "Ship zkBallot"), &root);
-
-    let nullifier = BytesN::from_array(&env, &[9; 32]);
-    let invalid_vote_public_inputs = public_inputs(&env, &root, 1, &nullifier, 2);
+fn cast_vote_rejects_invalid_vote_closed_proposal_and_empty_proof() {
+    let (env, client, _admin) = setup();
+    register_one(&env, &client, 1);
+    let proposal_id = create_proposal(&env, &client, 2_000);
+    let nullifier = bytes32(&env, 9);
     let proof = Bytes::from_slice(&env, &[42]);
 
-    let invalid_vote =
-        client.try_cast_vote(&1, &root, &nullifier, &2, &invalid_vote_public_inputs, &proof);
+    let invalid_vote = client.try_cast_vote(&proposal_id, &proof, &nullifier, &2);
     assert_eq!(invalid_vote, Err(Ok(Error::InvalidVote)));
 
-    let wrong_root = BytesN::from_array(&env, &[8; 32]);
-    let wrong_root_public_inputs = public_inputs(&env, &wrong_root, 1, &nullifier, 1);
-    let unknown_root =
-        client.try_cast_vote(&1, &wrong_root, &nullifier, &1, &wrong_root_public_inputs, &proof);
-    assert_eq!(unknown_root, Err(Ok(Error::RootMissing)));
+    let empty_proof = client.try_cast_vote(&proposal_id, &Bytes::new(&env), &nullifier, &1);
+    assert_eq!(empty_proof, Err(Ok(Error::EmptyProof)));
+
+    env.ledger().with_mut(|li| li.timestamp = 2_000);
+    let closed = client.try_cast_vote(&proposal_id, &proof, &nullifier, &1);
+    assert_eq!(closed, Err(Ok(Error::ProposalClosed)));
 }
 
 #[test]
-fn cast_vote_rejects_mismatched_public_inputs() {
-    let (env, client, _admin, root) = setup();
-    client.create_proposal(&1, &String::from_str(&env, "Ship zkBallot"), &root);
-
-    let nullifier = BytesN::from_array(&env, &[9; 32]);
+fn cross_proposal_replay_is_allowed_but_same_proposal_replay_is_blocked() {
+    let (env, client, _admin) = setup();
+    register_one(&env, &client, 1);
+    let first = create_proposal(&env, &client, 2_000);
+    let second = create_proposal(&env, &client, 2_000);
+    let nullifier_one = bytes32(&env, 9);
+    let nullifier_two = bytes32(&env, 10);
     let proof = Bytes::from_slice(&env, &[42]);
-    let mismatched_vote_public_inputs = public_inputs(&env, &root, 1, &nullifier, 0);
 
-    let result = client.try_cast_vote(
-        &1,
-        &root,
-        &nullifier,
-        &1,
-        &mismatched_vote_public_inputs,
-        &proof,
+    assert_eq!(
+        client.cast_vote(&first, &proof, &nullifier_one, &1),
+        Tally { yes: 1, no: 0 }
     );
-    assert_eq!(result, Err(Ok(Error::InvalidPublicInputs)));
+    assert_eq!(
+        client.cast_vote(&second, &proof, &nullifier_two, &0),
+        Tally { yes: 0, no: 1 }
+    );
+}
+
+#[test]
+fn finalize_requires_deadline_and_prevents_late_votes_or_repeat_finalization() {
+    let (env, client, _admin) = setup();
+    register_one(&env, &client, 1);
+    let proposal_id = create_proposal(&env, &client, 2_000);
+    let proof = Bytes::from_slice(&env, &[42]);
+    client.cast_vote(&proposal_id, &proof, &bytes32(&env, 9), &1);
+
+    let early = client.try_finalize(&proposal_id);
+    assert_eq!(early, Err(Ok(Error::TooEarlyToFinalize)));
+
+    env.ledger().with_mut(|li| li.timestamp = 2_000);
+    assert_eq!(client.finalize(&proposal_id), Tally { yes: 1, no: 0 });
+
+    let late_vote = client.try_cast_vote(&proposal_id, &proof, &bytes32(&env, 10), &0);
+    assert_eq!(late_vote, Err(Ok(Error::Finalized)));
+
+    let repeat = client.try_finalize(&proposal_id);
+    assert_eq!(repeat, Err(Ok(Error::Finalized)));
 }

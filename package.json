@@ -6,6 +6,7 @@
     "build:artifacts": "bash scripts/build-artifacts.sh",
     "deploy:testnet": "bash scripts/deploy-testnet.sh",
     "demo:testnet": "bash scripts/testnet-fixture-demo.sh",
+    "e2e:localnet": "bash scripts/e2e-localnet.sh",
     "fixture:inputs": "tsx scripts/generate-proof-inputs.ts",
     "fixture:prove": "bash scripts/prove-fixture.sh",
     "web:build": "cd web && vite build",
