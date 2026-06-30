@@ -12,13 +12,19 @@ fn setup() -> (Env, BallotContractClient<'static>, Address) {
     env.ledger().with_mut(|li| li.timestamp = 1_000);
     let admin = Address::generate(&env);
     let vk = Bytes::from_slice(&env, &[1, 2, 3]);
-    let contract_id = env.register(BallotContract, (&admin, &987_654_u64, &vk));
+    let contract_id = env.register(BallotContract, (&admin, &contract_domain(&env), &vk));
     let client = BallotContractClient::new(&env, &contract_id);
     (env, client, admin)
 }
 
 fn bytes32(env: &Env, value: u8) -> BytesN<32> {
     BytesN::from_array(env, &[value; 32])
+}
+
+fn contract_domain(env: &Env) -> BytesN<32> {
+    let mut bytes = [7_u8; 32];
+    bytes[0] = 0;
+    BytesN::from_array(env, &bytes)
 }
 
 fn field_bytes_from_u64(env: &Env, value: u64) -> Bytes {
@@ -42,7 +48,7 @@ fn expected_public_inputs(
 ) -> Bytes {
     let mut out = Bytes::new(env);
     out.append(&Bytes::from(root.clone()));
-    out.append(&field_bytes_from_u64(env, 987_654));
+    out.append(&Bytes::from(contract_domain(env)));
     out.append(&field_bytes_from_u64(env, proposal_id));
     out.append(&Bytes::from(nullifier.clone()));
     out.append(&field_bytes_from_u32(env, vote));
@@ -66,7 +72,7 @@ fn constructor_exposes_admin_domain_vk_and_empty_root() {
     let (env, client, admin) = setup();
 
     assert_eq!(client.admin(), admin);
-    assert_eq!(client.contract_domain(), 987_654);
+    assert_eq!(client.contract_domain(), contract_domain(&env));
     assert_eq!(client.verifying_key(), Bytes::from_slice(&env, &[1, 2, 3]));
     assert_eq!(
         client.get_root(),
@@ -162,6 +168,36 @@ fn cast_vote_rejects_invalid_vote_closed_proposal_and_empty_proof() {
     env.ledger().with_mut(|li| li.timestamp = 2_000);
     let closed = client.try_cast_vote(&proposal_id, &proof, &nullifier, &1);
     assert_eq!(closed, Err(Ok(Error::ProposalClosed)));
+}
+
+#[test]
+fn cast_vote_rejects_verifier_failure() {
+    let (env, client, _admin) = setup();
+    register_one(&env, &client, 1);
+    let proposal_id = create_proposal(&env, &client, 2_000);
+    let rejected_proof = Bytes::from_slice(&env, &[0]);
+
+    let result =
+        client.try_cast_vote(&proposal_id, &rejected_proof, &bytes32(&env, 9), &1);
+    assert_eq!(result, Err(Ok(Error::VerificationFailed)));
+    assert_eq!(client.tally(&proposal_id), Tally { yes: 0, no: 0 });
+}
+
+#[test]
+fn registry_and_proposal_mutations_require_admin_authorization() {
+    let env = Env::default();
+    env.ledger().with_mut(|li| li.timestamp = 1_000);
+    let admin = Address::generate(&env);
+    let vk = Bytes::from_slice(&env, &[1, 2, 3]);
+    let contract_id = env.register(BallotContract, (&admin, &contract_domain(&env), &vk));
+    let client = BallotContractClient::new(&env, &contract_id);
+
+    assert!(client
+        .try_register_voter(&bytes32(&env, 1), &0, &bytes32(&env, 10), &1)
+        .is_err());
+    assert!(client
+        .try_create_proposal(&bytes32(&env, 55), &2_000)
+        .is_err());
 }
 
 #[test]

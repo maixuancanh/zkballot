@@ -1,8 +1,11 @@
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 
-const dashboard = "http://localhost:5174/";
+const dashboard = "http://localhost:5173/";
 const explorer = "https://stellar.expert/explorer/testnet";
-const contract = "CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ";
+const contract = "CDDW36USNVE3Y2URBH2LXCCLFLFG65BWMHKEXUE23EMBBKOYTKA6Z4V6";
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -26,7 +29,17 @@ async function smoothScroll(page, selector, hold = 5000) {
   const page = await context.newPage();
 
   await page.goto(dashboard, { waitUntil: "networkidle", timeout: 30000 });
-  await pause(9000);
+  await pause(2500);
+  await page.getByRole("button", { name: "Connect demo session" }).click();
+  await pause(1500);
+  await page.getByRole("button", { name: "Create local identity" }).click();
+  await pause(1500);
+  await page.getByRole("button", { name: "Load verified registration" }).click();
+  await page.getByRole("button", { name: "YES", exact: true }).click();
+  await page.getByRole("button", { name: "Verify proof fixture" }).click();
+  await pause(1500);
+  await page.getByRole("button", { name: "Load verified vote" }).click();
+  await pause(3000);
 
   await smoothScroll(page, "#zk-flow", 11000);
   await smoothScroll(page, "#evidence", 3000);

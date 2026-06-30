@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BN254_SCALAR_MODULUS,
   bytesToField,
+  fieldHexToBigInt,
   fieldToBytes,
   u64ToField,
 } from "./encoding.js";
@@ -31,5 +32,16 @@ describe("canonical BN254 field encoding", () => {
     expect(() => u64ToField(-1n)).toThrow(/u64/i);
     expect(() => u64ToField(1n << 64n)).toThrow(/u64/i);
   });
-});
 
+  it("parses a canonical 32-byte field hex value", () => {
+    const hex = `00${"ab".repeat(31)}`;
+    expect(fieldHexToBigInt(hex)).toBe(BigInt(`0x${hex}`));
+  });
+
+  it("rejects field hex values with the wrong length or modulus", () => {
+    expect(() => fieldHexToBigInt("ab")).toThrow(/64 hexadecimal/i);
+    expect(() =>
+      fieldHexToBigInt(BN254_SCALAR_MODULUS.toString(16).padStart(64, "0")),
+    ).toThrow(/canonical/i);
+  });
+});

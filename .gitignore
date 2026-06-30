@@ -1,6 +1,8 @@
 .env
 .env.local
 node_modules/
+.generated-proof-tools/
+web/vite-demo*.log
 tools/bin/jq
 web/node_modules/
 dist/

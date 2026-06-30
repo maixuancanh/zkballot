@@ -39,3 +39,10 @@ export function bytesToField(bytes: Uint8Array): bigint {
   return assertCanonicalField(value);
 }
 
+export function fieldHexToBigInt(hex: string): bigint {
+  const normalized = hex.startsWith("0x") ? hex.slice(2) : hex;
+  if (!/^[0-9a-fA-F]{64}$/.test(normalized)) {
+    throw new RangeError("field hex must contain exactly 64 hexadecimal characters");
+  }
+  return assertCanonicalField(BigInt(`0x${normalized}`));
+}

@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { fieldToBytes, u64ToField } from "./encoding.js";
+import { fieldHexToBigInt, fieldToBytes, u64ToField } from "./encoding.js";
 import {
   buildTree,
   identityCommitment,
@@ -63,7 +63,10 @@ if (!Number.isInteger(proverIndex) || proverIndex < 0 || proverIndex >= identity
 
 const identitySecret = identitySecrets[proverIndex];
 const identityTrapdoor = identityTrapdoors[proverIndex];
-const contractDomain = u64ToField(BigInt(process.env.CONTRACT_DOMAIN ?? "987654"));
+const contractDomain = fieldHexToBigInt(
+  process.env.CONTRACT_DOMAIN_HEX ??
+    "00000000000000000000000000000000000000000000000000000000000f1206",
+);
 const proposalId = u64ToField(BigInt(process.env.PROPOSAL_ID ?? "1"));
 const vote = BigInt(process.env.VOTE ?? "1");
 

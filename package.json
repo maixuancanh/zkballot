@@ -7,14 +7,16 @@
     "deploy:testnet": "bash scripts/deploy-testnet.sh",
     "demo:testnet": "bash scripts/testnet-fixture-demo.sh",
     "e2e:localnet": "bash scripts/e2e-localnet.sh",
-    "fixture:inputs": "tsx scripts/generate-proof-inputs.ts",
+    "fixture:inputs": "bash scripts/run-proof-inputs.sh",
     "fixture:prove": "bash scripts/prove-fixture.sh",
+    "fixture:mutations": "bash scripts/verify-public-input-mutations.sh",
     "web:build": "cd web && vite build",
     "web:dev": "cd web && vite --host 0.0.0.0",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@types/node": "^26.0.1",
     "@vitejs/plugin-react": "^4.7.0",
     "tsx": "^4.22.4",
     "typescript": "^5.8.3",

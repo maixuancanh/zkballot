@@ -21,7 +21,7 @@ transparent binary tally.
 | Web evidence dashboard | Run locally with `npm run web:dev`, then open `http://localhost:5173` |
 | Demo video | [zkballot-demo-video.mp4](./zkballot-demo-video.mp4) — 2:04.8, recorded from the working evidence dashboard |
 | Stellar network | Testnet |
-| Deployed contract | [`CCXO...WONQ`](https://stellar.expert/explorer/testnet/contract/CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ) |
+| Deployed contract | [`CDDW...Z4V6`](https://stellar.expert/explorer/testnet/contract/CDDW36USNVE3Y2URBH2LXCCLFLFG65BWMHKEXUE23EMBBKOYTKA6Z4V6) |
 | Verified lifecycle | 3 voters: `yes / no / yes`; replay rejected; finalized tally `{"no":1,"yes":2}` |
 | Proof system | Noir + UltraHonk, `oracle_hash = keccak` |
 | On-chain verifier | [Nethermind `rs-soroban-ultrahonk`](https://github.com/NethermindEth/rs-soroban-ultrahonk) |
@@ -66,6 +66,7 @@ the Soroban contract before state changes.
 - Admin-authorized, append-only voter registration.
 - Proposal root snapshots, metadata hashes, deadlines, and finalization.
 - Contract-side reconstruction of all five public inputs.
+- A random canonical 31-byte contract domain for deployment separation.
 - Proposal-scoped double-vote protection.
 - Stored-VK and optimized static-VK contract builds.
 - Localnet three-voter E2E automation.
@@ -464,9 +465,10 @@ npm run web:build
 | Suite | Command | Current coverage/result |
 | --- | --- | --- |
 | Noir circuit | `nargo test --program-dir circuits/ballot` | 6 tests: valid proof plus wrong root/domain/proposal/nullifier and non-binary vote rejection |
-| TypeScript and web helpers | `npm test` | 15 tests across encoding, Merkle tree, identity, prover, and Stellar helpers |
+| TypeScript and web helpers | `npm test` | 22 tests across encoding, Merkle tree, identity, workflow, prover, and Stellar helpers |
 | Native proof fixture | `npm run fixture:prove` | Ends with `Proof verified successfully` and checks exact public-input bytes |
-| Soroban contract | `cargo test --manifest-path contracts/ballot/Cargo.toml` | 7 tests covering initialization, registry, proposals, voting, replay, deadlines, and finalization |
+| Public-input mutation | `npm run fixture:mutations` | Independently mutates all five public inputs and requires every verification to fail |
+| Soroban contract | `cargo test --manifest-path contracts/ballot/Cargo.toml` | 9 tests including authorization and verifier-rejection coverage |
 | Localnet lifecycle | `npm run e2e:localnet` | Three proofs accepted, replay rejected, final tally yes=2/no=1 |
 | Web production build | `npm run web:build` | Produces static Vite assets in `web/dist` |
 
@@ -474,6 +476,13 @@ The checked-in proof artifacts are protected by SHA-256 manifests:
 
 - [`artifacts/ballot/SHA256SUMS`](./artifacts/ballot/SHA256SUMS)
 - [`artifacts/fixture/SHA256SUMS`](./artifacts/fixture/SHA256SUMS)
+
+Verify them from the repository root with:
+
+```bash
+sha256sum -c artifacts/ballot/SHA256SUMS
+(cd artifacts/fixture && sha256sum -c SHA256SUMS)
+```
 
 ## Localnet E2E
 
@@ -537,12 +546,15 @@ cp .env.example .env
 STELLAR_NETWORK=testnet
 STELLAR_SOURCE=zkballot-deployer
 ADMIN_ADDRESS=G_YOUR_PUBLIC_ADDRESS
-CONTRACT_DOMAIN=987654
+CONTRACT_DOMAIN_HEX=
 BALLOT_ID=
 ```
 
 - `STELLAR_SOURCE` is the local Stellar CLI identity name.
 - `ADMIN_ADDRESS` is its `G...` public address.
+- Leave `CONTRACT_DOMAIN_HEX` empty to generate a random canonical 31-byte
+  field during deployment, or set a previously generated 64-character value
+  for reproducibility.
 - Never commit secret keys or seed phrases.
 
 ### 3. Deploy
@@ -578,19 +590,19 @@ npm run demo:testnet
 
 ## Verified Stellar testnet evidence
 
-**Contract:** [`CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ`](https://stellar.expert/explorer/testnet/contract/CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ)
+**Contract:** [`CDDW36USNVE3Y2URBH2LXCCLFLFG65BWMHKEXUE23EMBBKOYTKA6Z4V6`](https://stellar.expert/explorer/testnet/contract/CDDW36USNVE3Y2URBH2LXCCLFLFG65BWMHKEXUE23EMBBKOYTKA6Z4V6)
 
 | Step | Result | Stellar Expert |
 | ---: | --- | --- |
-| 1 | Deploy static-VK ballot contract | [Transaction](https://stellar.expert/explorer/testnet/tx/1a9069576a2cff36b4ceb326bd1054ed2ef9c311c37df04268277db652f4de28) |
-| 2 | Register voter commitment 0 | [Transaction](https://stellar.expert/explorer/testnet/tx/4cb6125ff354577f864ed0f89fe1073eefc64e3178e6bc6142139605856c645b) |
-| 3 | Register voter commitment 1 | [Transaction](https://stellar.expert/explorer/testnet/tx/f0c12435a601be593fa5bc03c587a72a5812e4d7894ac87c6ad4be2dfa0a5c55) |
-| 4 | Register voter commitment 2 | [Transaction](https://stellar.expert/explorer/testnet/tx/1beb26702e41826c2582ab0275e5f71a3140ee77e014136e94de47ea7abc2748) |
-| 5 | Create proposal 1 with root snapshot | [Transaction](https://stellar.expert/explorer/testnet/tx/dba6a51a928b88c77cc68ba67bfaa627e4c94f284c02aa8c3b0f1ef1eef2d2ad) |
-| 6 | Cast `YES`; proof verified | [Transaction](https://stellar.expert/explorer/testnet/tx/c01a73c7ac1cc9e015722a71f262bc0c627e81c7d01af00218677fba024d3c49) |
-| 7 | Cast `NO`; proof verified | [Transaction](https://stellar.expert/explorer/testnet/tx/b2e1cdc66e0e810cd1068fdebb80b122aef40223b4e924fc6773f64d4862a177) |
-| 8 | Cast `YES`; proof verified | [Transaction](https://stellar.expert/explorer/testnet/tx/f45451e73a77e2019563c1a49f2816e235f16fc00841a7d1400190765b0893ab) |
-| 9 | Finalize after the deadline | [Transaction](https://stellar.expert/explorer/testnet/tx/4ffbcbd515c808097abf8c4f66df0121f2b937d9f52dde62bda0cdff53bbd9ad) |
+| 1 | Deploy static-VK ballot contract | [Transaction](https://stellar.expert/explorer/testnet/tx/b9ad22820660d3a5c652df0f31c88fd41afadaaeefd98f75e849e5cb2aa51015) |
+| 2 | Register voter commitment 0 | [Transaction](https://stellar.expert/explorer/testnet/tx/ad63620d0a7b2019a626ab7d93c6a3e2a531ae557555726008d7451bf3c5ceb3) |
+| 3 | Register voter commitment 1 | [Transaction](https://stellar.expert/explorer/testnet/tx/397d28a2a176c590662c91b824b77684778a39658e40b492cea6044d3534cf9f) |
+| 4 | Register voter commitment 2 | [Transaction](https://stellar.expert/explorer/testnet/tx/dcefa6e837f2bebfb93828b09d71b9f2a1b6488a6eeb6f61fc53d21a21d3066e) |
+| 5 | Create proposal 1 with root snapshot | [Transaction](https://stellar.expert/explorer/testnet/tx/9ce8e9f6e1df231459e3c78c2d0299439262768a28661b09f1247434cd9c8331) |
+| 6 | Cast `YES`; proof verified | [Transaction](https://stellar.expert/explorer/testnet/tx/3871a69de3d7bc1fdd8bf2444af3404126acbc945612f5e907e3a3a84b57856c) |
+| 7 | Cast `NO`; proof verified | [Transaction](https://stellar.expert/explorer/testnet/tx/499a88e093f8ec8f66a9ccf0748a2ee236bfc2699747931c9e53ee018ffc0fb7) |
+| 8 | Cast `YES`; proof verified | [Transaction](https://stellar.expert/explorer/testnet/tx/ecf70f272ffcaa7eab1d8fca49db0ff2db35639ace55d603db4b3c4b29f4ddd4) |
+| 9 | Finalize after the deadline | [Transaction](https://stellar.expert/explorer/testnet/tx/0556cd815c84e59c2dc87edd72b9df5c0f21f4053fbec0e20227e371547f870f) |
 
 Replay evidence:
 
@@ -611,6 +623,10 @@ npm run web:dev
 
 Open [http://localhost:5173](http://localhost:5173). The dashboard presents:
 
+- a four-step guided `Connect → Register → Vote → Results` walkthrough;
+- local canonical identity generation and recovery-file export;
+- an explicit disclosure that guided controls replay verified evidence rather
+  than submitting a new browser-wallet transaction;
 - the deployed contract;
 - the final tally and replay-rejection result;
 - links to all nine successful testnet transactions;
@@ -632,7 +648,7 @@ not claim a public hosted URL.
 The submission video is checked in at
 [`zkballot-demo-video.mp4`](./zkballot-demo-video.mp4).
 
-- Duration: **124.818 seconds** (2:04.8).
+- Duration: **124.800 seconds** (2:04.8).
 - Resolution: **1280 × 720**.
 - Content: working evidence dashboard, Stellar Expert contract activity,
   successful vote transactions, replay rejection, reproduction commands, and

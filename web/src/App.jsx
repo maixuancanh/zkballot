@@ -1,54 +1,55 @@
 import "../src/styles.css";
 import { PUBLIC_INPUT_ORDER } from "./lib/prover.js";
+import Workflow from "./Workflow.jsx";
 
 const EXPLORER = "https://stellar.expert/explorer/testnet";
-const CONTRACT_ID = "CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ";
+const CONTRACT_ID = "CDDW36USNVE3Y2URBH2LXCCLFLFG65BWMHKEXUE23EMBBKOYTKA6Z4V6";
 
 const lifecycle = [
   {
     label: "Deploy static-VK ballot contract",
     status: "submitted",
-    tx: "1a9069576a2cff36b4ceb326bd1054ed2ef9c311c37df04268277db652f4de28",
+    tx: "b9ad22820660d3a5c652df0f31c88fd41afadaaeefd98f75e849e5cb2aa51015",
   },
   {
     label: "Register voter 0 commitment",
     status: "registered",
-    tx: "4cb6125ff354577f864ed0f89fe1073eefc64e3178e6bc6142139605856c645b",
+    tx: "ad63620d0a7b2019a626ab7d93c6a3e2a531ae557555726008d7451bf3c5ceb3",
   },
   {
     label: "Register voter 1 commitment",
     status: "registered",
-    tx: "f0c12435a601be593fa5bc03c587a72a5812e4d7894ac87c6ad4be2dfa0a5c55",
+    tx: "397d28a2a176c590662c91b824b77684778a39658e40b492cea6044d3534cf9f",
   },
   {
     label: "Register voter 2 commitment",
     status: "registered",
-    tx: "1beb26702e41826c2582ab0275e5f71a3140ee77e014136e94de47ea7abc2748",
+    tx: "dcefa6e837f2bebfb93828b09d71b9f2a1b6488a6eeb6f61fc53d21a21d3066e",
   },
   {
     label: "Create proposal with 3-leaf root snapshot",
     status: "proposal #1",
-    tx: "dba6a51a928b88c77cc68ba67bfaa627e4c94f284c02aa8c3b0f1ef1eef2d2ad",
+    tx: "9ce8e9f6e1df231459e3c78c2d0299439262768a28661b09f1247434cd9c8331",
   },
   {
     label: "Cast vote: YES",
     status: "proof verified",
-    tx: "c01a73c7ac1cc9e015722a71f262bc0c627e81c7d01af00218677fba024d3c49",
+    tx: "3871a69de3d7bc1fdd8bf2444af3404126acbc945612f5e907e3a3a84b57856c",
   },
   {
     label: "Cast vote: NO",
     status: "proof verified",
-    tx: "b2e1cdc66e0e810cd1068fdebb80b122aef40223b4e924fc6773f64d4862a177",
+    tx: "499a88e093f8ec8f66a9ccf0748a2ee236bfc2699747931c9e53ee018ffc0fb7",
   },
   {
     label: "Cast vote: YES",
     status: "proof verified",
-    tx: "f45451e73a77e2019563c1a49f2816e235f16fc00841a7d1400190765b0893ab",
+    tx: "ecf70f272ffcaa7eab1d8fca49db0ff2db35639ace55d603db4b3c4b29f4ddd4",
   },
   {
     label: "Finalize proposal after deadline",
     status: "finalized",
-    tx: "4ffbcbd515c808097abf8c4f66df0121f2b937d9f52dde62bda0cdff53bbd9ad",
+    tx: "0556cd815c84e59c2dc87edd72b9df5c0f21f4053fbec0e20227e371547f870f",
   },
 ];
 
@@ -58,7 +59,7 @@ const proofFacts = [
   ["Verifier", "Nethermind Soroban UltraHonk verifier"],
   ["SDK", "Soroban SDK 26.1.0"],
   ["Tree depth", "20"],
-  ["Contract domain", "987654"],
+  ["Contract domain", "Random canonical 31-byte field"],
 ];
 
 const commands = [
@@ -105,12 +106,15 @@ export default function App() {
       <nav className="topbar" aria-label="Demo navigation">
         <div className="brand">zkBallot</div>
         <div className="navlinks">
+          <a href="#vote">Vote</a>
           <a href="#evidence">Evidence</a>
           <a href="#zk-flow">ZK flow</a>
           <a href="#privacy">Privacy</a>
           <a href="#reproduce">Reproduce</a>
         </div>
       </nav>
+
+      <Workflow />
 
       <section className="hero">
         <div className="hero-copy">

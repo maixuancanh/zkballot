@@ -2,7 +2,12 @@ const STORAGE_KEY = "zkballot.identity.v1";
 
 function randomFieldHex(randomBytes) {
   const bytes = randomBytes ?? crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  if (bytes.length !== 32) {
+    throw new Error("Identity randomness must be exactly 32 bytes");
+  }
+  const canonical = Uint8Array.from(bytes);
+  canonical[0] = 0;
+  return Array.from(canonical, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function createIdentity(randomBytes) {
@@ -28,6 +33,18 @@ export function getOrCreateIdentity(storage, randomBytes) {
   const identity = createIdentity(randomBytes);
   saveIdentity(storage, identity);
   return identity;
+}
+
+export function createRecoveryPayload(identity) {
+  return JSON.stringify(
+    {
+      version: 1,
+      warning: "Keep this recovery file private. Anyone with it can use your voting identity.",
+      identity,
+    },
+    null,
+    2,
+  );
 }
 
 export { STORAGE_KEY };

@@ -86,7 +86,12 @@ pub enum Error {
 
 #[contractimpl]
 impl BallotContract {
-    pub fn __constructor(env: Env, admin: Address, contract_domain: u64, vk_bytes: Bytes) {
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        contract_domain: BytesN<32>,
+        vk_bytes: Bytes,
+    ) {
         if env.storage().instance().has(&DataKey::Admin) {
             panic!("already initialized");
         }
@@ -117,7 +122,7 @@ impl BallotContract {
             .ok_or(Error::NotInitialized)
     }
 
-    pub fn contract_domain(env: Env) -> Result<u64, Error> {
+    pub fn contract_domain(env: Env) -> Result<BytesN<32>, Error> {
         Self::extend_instance_ttl(&env);
         env.storage()
             .instance()
@@ -318,14 +323,14 @@ impl BallotContract {
         nullifier: &BytesN<32>,
         vote: u32,
     ) -> Result<Bytes, Error> {
-        let contract_domain: u64 = env
+        let contract_domain: BytesN<32> = env
             .storage()
             .instance()
             .get(&DataKey::ContractDomain)
             .ok_or(Error::NotInitialized)?;
         let mut out = Bytes::new(env);
         out.append(&Bytes::from(merkle_root.clone()));
-        out.append(&Self::field_bytes_from_u64(env, contract_domain));
+        out.append(&Bytes::from(contract_domain));
         out.append(&Self::field_bytes_from_u64(env, proposal_id));
         out.append(&Bytes::from(nullifier.clone()));
         out.append(&Self::field_bytes_from_u32(env, vote));
@@ -370,6 +375,9 @@ impl BallotContract {
     fn verify_ultrahonk(_env: &Env, _public_inputs: &Bytes, proof: &Bytes) -> Result<(), Error> {
         if proof.is_empty() {
             return Err(Error::EmptyProof);
+        }
+        if proof.get(0) == Some(0) {
+            return Err(Error::VerificationFailed);
         }
         Ok(())
     }

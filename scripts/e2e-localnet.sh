@@ -16,7 +16,7 @@ export PATH="$(dirname "$JQ_BIN"):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/
 
 : "${STELLAR_NETWORK:=local}"
 : "${STELLAR_SOURCE:=zkballot-local-admin}"
-: "${CONTRACT_DOMAIN:=987654}"
+: "${CONTRACT_DOMAIN_HEX:=}"
 : "${PROPOSAL_ID:=1}"
 : "${IDENTITY_SECRETS:=111,333,555}"
 : "${IDENTITY_TRAPDOORS:=222,444,666}"
@@ -29,6 +29,11 @@ export PATH="$(dirname "$JQ_BIN"):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/
 : "${FINALIZE_WAIT_SECONDS:=$((PROPOSAL_DEADLINE_SECONDS + 4))}"
 : "${SKIP_FINALIZE:=0}"
 : "${INSTRUCTION_LEEWAY:=100000000}"
+
+if [[ -z "$CONTRACT_DOMAIN_HEX" ]]; then
+  CONTRACT_DOMAIN_HEX="00$(openssl rand -hex 31)"
+fi
+export CONTRACT_DOMAIN_HEX
 
 if [[ "$START_LOCALNET" == "1" ]]; then
   if ! command -v docker >/dev/null 2>&1; then
@@ -62,7 +67,7 @@ for index in 0 1 2; do
   IDENTITY_TRAPDOORS="$IDENTITY_TRAPDOORS" \
   PROVER_INDEX="$index" \
   PROPOSAL_ID="$PROPOSAL_ID" \
-  CONTRACT_DOMAIN="$CONTRACT_DOMAIN" \
+  CONTRACT_DOMAIN_HEX="$CONTRACT_DOMAIN_HEX" \
   VOTE="$vote" \
     bash scripts/prove-fixture.sh
 done
@@ -81,7 +86,7 @@ CONTRACT_ID="$(
     --alias zkballot-local-e2e \
     -- \
     --admin "$ADMIN_ADDRESS" \
-    --contract_domain "$CONTRACT_DOMAIN" \
+    --contract_domain "$CONTRACT_DOMAIN_HEX" \
     --vk_bytes-file-path artifacts/ballot/vk \
   | tail -n 1
 )"
@@ -196,4 +201,4 @@ if [[ "$final_tally" != *'"yes":2'* || "$final_tally" != *'"no":1'* ]]; then
   exit 1
 fi
 
-echo "zkBallot localnet E2E passed: yes/no/yes, double-vote rejected, finalized to (2, 1)."
+echo "zkBallot $STELLAR_NETWORK E2E passed: yes/no/yes, double-vote rejected, finalized to (2, 1)."

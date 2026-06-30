@@ -8,9 +8,14 @@ WASM="$CONTRACT_DIR/target/wasm32v1-none/release/ballot.wasm"
 : "${STELLAR_NETWORK:=testnet}"
 : "${STELLAR_SOURCE:?Set STELLAR_SOURCE to a funded Stellar CLI identity/account}"
 : "${ADMIN_ADDRESS:?Set ADMIN_ADDRESS to the admin public address}"
-: "${CONTRACT_DOMAIN:=987654}"
+: "${CONTRACT_DOMAIN_HEX:=}"
 : "${STELLAR_BUILD_FEATURES:=}"
 : "${STELLAR_CONTRACT_ALIAS:=zkballot}"
+
+if [[ -z "$CONTRACT_DOMAIN_HEX" ]]; then
+  CONTRACT_DOMAIN_HEX="00$(openssl rand -hex 31)"
+fi
+export CONTRACT_DOMAIN_HEX
 
 npm run build:artifacts
 npm run fixture:prove
@@ -30,5 +35,5 @@ stellar contract deploy \
   --alias "$STELLAR_CONTRACT_ALIAS" \
   -- \
   --admin "$ADMIN_ADDRESS" \
-  --contract_domain "$CONTRACT_DOMAIN" \
+  --contract_domain "$CONTRACT_DOMAIN_HEX" \
   --vk_bytes-file-path "$ROOT_DIR/artifacts/ballot/vk"

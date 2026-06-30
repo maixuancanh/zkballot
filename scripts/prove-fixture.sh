@@ -19,9 +19,7 @@ if [[ ! -x "$JQ_BIN" ]]; then
 fi
 export PATH="$(dirname "$JQ_BIN"):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:$HOME/.nargo/bin:$HOME/.local/bin"
 
-"$HOME/.nvm/versions/node/v20.20.2/bin/node" \
-  "$ROOT_DIR/node_modules/tsx/dist/cli.mjs" \
-  "$ROOT_DIR/scripts/generate-proof-inputs.ts"
+bash "$ROOT_DIR/scripts/run-proof-inputs.sh"
 
 (
   cd "$CIRCUIT_DIR"
@@ -51,11 +49,11 @@ cp "$CIRCUIT_DIR/target/proof" "$FIXTURE_DIR/proof"
 cp "$CIRCUIT_DIR/target/public_inputs" "$FIXTURE_DIR/public_inputs"
 
 (
-  cd "$ROOT_DIR"
+  cd "$FIXTURE_DIR"
   sha256sum \
-    artifacts/fixture/proof \
-    artifacts/fixture/public_inputs \
-    artifacts/fixture/expected_public_inputs \
+    proof \
+    public_inputs \
+    expected_public_inputs \
     > "$FIXTURE_DIR/SHA256SUMS"
 )
 
