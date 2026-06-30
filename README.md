@@ -18,7 +18,7 @@ transparent binary tally.
 
 | Item | Link or result |
 | --- | --- |
-| Web evidence dashboard | Run locally with `npm run web:dev`, then open `http://localhost:5173` |
+| Web evidence dashboard | [zkballot-mu.vercel.app](https://zkballot-mu.vercel.app) |
 | Demo video | [zkballot-demo-video.mp4](./zkballot-demo-video.mp4) — 2:04.8, recorded from the working evidence dashboard |
 | Stellar network | Testnet |
 | Deployed contract | [`CDDW...Z4V6`](https://stellar.expert/explorer/testnet/contract/CDDW36USNVE3Y2URBH2LXCCLFLFG65BWMHKEXUE23EMBBKOYTKA6Z4V6) |
@@ -615,7 +615,11 @@ Replay evidence:
 
 ## Demo web application
 
-Start the dashboard:
+Open the public deployment:
+
+[https://zkballot-mu.vercel.app](https://zkballot-mu.vercel.app)
+
+Or start the dashboard locally:
 
 ```bash
 npm run web:dev
@@ -640,8 +644,7 @@ Create a production build:
 npm run web:build
 ```
 
-The dashboard is currently provided as a local/static build; this README does
-not claim a public hosted URL.
+The public Vercel deployment is a static Vite build of the same dashboard.
 
 ## Demo video
 
