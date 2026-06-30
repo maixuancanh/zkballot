@@ -1,211 +1,807 @@
 # zkBallot
 
-Anonymous binary voting on Stellar with a public live tally.
+### Anonymous voter eligibility. Public tally. Verified on Stellar testnet.
 
-Important privacy note: zkBallot hides the voter identity witness and Merkle path, but `vote` is a public Noir input. This is not an encrypted tally, sealed ballot, or coercion-resistant voting protocol.
+zkBallot is a zero-knowledge voting protocol for Stellar. A voter proves that
+their identity commitment belongs to an eligible Merkle set without revealing
+which registered identity they control. A Soroban smart contract verifies the
+UltraHonk proof on-chain, rejects reused proposal nullifiers, and maintains a
+transparent binary tally.
 
-Hackathon preview note: the Soroban verifier now uses Nethermind's UltraHonk verifier from the OpenZeppelin/SDF Confidential Tokens developer preview branch. That improves alignment with the current Stellar preview stack, but it does not by itself make the ballot encrypted: OpenZeppelin Confidential Tokens target private token balances and transfer amounts, while zkBallot still exposes the binary vote as public input for a transparent tally.
+> [!IMPORTANT]
+> zkBallot provides **anonymous eligibility**, not an encrypted ballot. The
+> identity witness and Merkle path are private, but `vote` is a public Noir
+> input. The selected vote, proposal-scoped nullifier, and tally are public on
+> Stellar.
+
+## Submission at a glance
+
+| Item | Link or result |
+| --- | --- |
+| Web evidence dashboard | Run locally with `npm run web:dev`, then open `http://localhost:5173` |
+| Demo video | [zkballot-demo-video.mp4](./zkballot-demo-video.mp4) — 2:04.8, recorded from the working evidence dashboard |
+| Stellar network | Testnet |
+| Deployed contract | [`CCXO...WONQ`](https://stellar.expert/explorer/testnet/contract/CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ) |
+| Verified lifecycle | 3 voters: `yes / no / yes`; replay rejected; finalized tally `{"no":1,"yes":2}` |
+| Proof system | Noir + UltraHonk, `oracle_hash = keccak` |
+| On-chain verifier | [Nethermind `rs-soroban-ultrahonk`](https://github.com/NethermindEth/rs-soroban-ultrahonk) |
+| Stellar integration | Soroban SDK 26.1.0, contract deployment and proof verification on testnet |
+
+The latest verified testnet run registered three commitments, created a
+proposal, accepted three real UltraHonk proofs, rejected a repeated nullifier
+with `NullifierUsed (#6)`, and finalized the proposal with
+`{"no":1,"yes":2}`.
+
+## Why zkBallot
+
+Traditional public-chain voting creates a difficult trade-off:
+
+- publishing voter accounts links identities to participation;
+- trusting an off-chain eligibility service weakens verifiability; and
+- accepting votes without a one-person-one-vote mechanism allows replay.
+
+zkBallot separates **eligibility** from **identity disclosure**:
+
+1. An administrator registers identity commitments in an append-only Merkle
+   tree.
+2. A proposal snapshots the current root.
+3. An eligible voter generates a zero-knowledge membership proof off-chain.
+4. The contract reconstructs the public inputs and verifies the proof.
+5. A proposal-scoped nullifier prevents the same identity from voting twice.
+6. The contract updates and later finalizes a public tally.
+
+No trusted voting server decides whether a submitted ballot is valid. The
+eligibility rule is enforced by the Noir circuit and the proof is verified by
+the Soroban contract before state changes.
 
 ## What is implemented
 
-- Noir circuit proving:
-  - identity commitment belongs to a Merkle root,
-  - nullifier is bound to `DOMAIN_ZKBALLOT`, `contract_domain`, and `proposal_id`,
-  - public vote is binary (`0` or `1`).
-- TypeScript utilities for canonical BN254 field encoding and Poseidon2 Merkle trees.
-- UltraHonk VK/proof artifact generation with `--oracle_hash keccak`.
-- Soroban ballot contract:
-  - admin-authorized append-only voter registry,
-  - proposal root snapshots and deadlines,
-  - stored VK constructor in the default build,
-  - optional `static-vk` build that embeds the VK into WASM to remove runtime VK storage reads,
-  - UltraHonk proof verification through Nethermind's Soroban verifier backend,
-  - contract-side public-input reconstruction for root/domain/proposal/nullifier/vote,
-  - nullifier-based double-vote prevention,
-  - finalization after the proposal deadline,
-  - public yes/no tally.
-- React demo UI and helper tests that state the privacy boundary honestly.
+- A depth-20 Poseidon2 Merkle membership circuit in Noir.
+- Private identity secret, trapdoor, Merkle path, and path indices.
+- A proposal- and contract-bound nullifier construction.
+- Binary vote enforcement inside the circuit.
+- Canonical 32-byte big-endian BN254 field encoding.
+- UltraHonk proof and verification-key generation with a Keccak transcript.
+- A Soroban ballot contract using the Nethermind UltraHonk verifier.
+- Admin-authorized, append-only voter registration.
+- Proposal root snapshots, metadata hashes, deadlines, and finalization.
+- Contract-side reconstruction of all five public inputs.
+- Proposal-scoped double-vote protection.
+- Stored-VK and optimized static-VK contract builds.
+- Localnet three-voter E2E automation.
+- A completed three-voter testnet lifecycle with public transaction evidence.
+- A responsive React evidence dashboard and a recorded demo walkthrough.
+- Circuit, TypeScript, UI-helper, and Soroban contract tests.
 
-## Verified toolchain
+## System architecture
 
-- Ubuntu 24.04 on WSL2
-- Stellar CLI 27.0.0
-- Nargo 1.0.0-beta.9
-- Barretenberg 0.87.0
-- Node.js 20.20.2
-- Rust 1.95.0
-- Docker Engine 29.6.1 in WSL for localnet
-- Nethermind `rs-soroban-ultrahonk` verifier rev `661db07200f890b1bd9a7349ed787c70a706dd12`
+```mermaid
+flowchart LR
+    subgraph OffChain["Off-chain client / prover"]
+        Identity["Identity secret + trapdoor"]
+        Tree["Merkle tree + membership path"]
+        Inputs["Proposal data + vote"]
+        Circuit["Noir ballot circuit"]
+        Prover["Barretenberg UltraHonk prover"]
 
-## Confidential Tokens preview fit
+        Identity --> Circuit
+        Tree --> Circuit
+        Inputs --> Circuit
+        Circuit --> Prover
+    end
 
-OpenZeppelin and SDF's Confidential Tokens preview is useful for zkBallot in two honest ways:
+    subgraph Stellar["Stellar testnet"]
+        Ballot["zkBallot Soroban contract"]
+        Verifier["Nethermind UltraHonk verifier"]
+        State["Proposal state<br/>spent nullifiers<br/>public tally"]
 
-1. The preview branch wires real Noir/UltraHonk proof verification into Soroban through Nethermind's verifier. zkBallot now uses that verifier backend directly for ballot proofs.
-2. The Confidential Token wrapper model is a plausible future extension for stake-weighted or token-gated voting where balances/transfer amounts need privacy.
+        Ballot -->|"proof + reconstructed public inputs"| Verifier
+        Verifier -->|"valid / invalid"| Ballot
+        Ballot --> State
+    end
 
-What zkBallot does not claim:
-
-- It does not use the Confidential Token contract wrapper today.
-- It does not hide the selected vote. The `vote` field remains a public input.
-- It does not implement encrypted tallying or private aggregation.
-- The preview dependency is testnet/localnet-oriented and should be treated as unaudited preview code until the upstream audits finish.
-
-References:
-
-- OpenZeppelin preview branch: <https://github.com/OpenZeppelin/stellar-contracts/tree/feat/confidential-verifier-ultrahonk>
-- Demo shared by the hackathon: <https://stellar-confidential-token-demo.billowing-moon-0c6f.workers.dev/>
-
-## Reproduce locally
-
-Run these from the repo root in WSL:
-
-```bash
-export PATH="$PWD/tools/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:$HOME/.nargo/bin:$HOME/.local/bin"
-npm install
-npm test
-nargo test --program-dir circuits/ballot
-npm run build:artifacts
-npm run fixture:prove
-cargo test --manifest-path contracts/ballot/Cargo.toml
-(cd contracts/ballot && stellar contract build)
-(cd contracts/ballot && stellar contract build --features static-vk)
-npm --prefix web test
-npm --prefix web run typecheck
-npm --prefix web run build
+    Prover -->|"proof, nullifier, vote, proposal_id"| Ballot
+    Admin["Admin"] -->|"register commitments<br/>create proposal"| Ballot
+    Explorer["Stellar Expert"] -.->|"public evidence"| State
 ```
 
-Expected highlights:
+### Component responsibilities
 
-- `nargo test`: 6 tests pass.
-- `npm test`: encoding/Merkle/web helper tests pass.
-- `npm run fixture:prove`: `Proof verified successfully`.
-- `cargo test`: 7 contract tests pass.
-- `stellar contract build`: emits `ballot.wasm` with the Nethermind verifier backend.
-- `stellar contract build --features static-vk`: emits the optimized static-VK Nethermind verifier variant.
+| Component | Responsibility |
+| --- | --- |
+| Noir circuit | Proves Merkle membership, derives the expected nullifier, and constrains the vote to `0` or `1` |
+| TypeScript utilities | Build Poseidon2 Merkle trees, encode BN254 fields, and generate deterministic proof fixtures |
+| Barretenberg | Compiles the circuit and creates/verifies UltraHonk proofs with a Keccak transcript |
+| Soroban contract | Manages registry/proposals, reconstructs public inputs, invokes the verifier, blocks replay, and updates the tally |
+| Nethermind verifier | Verifies the UltraHonk proof inside the Soroban execution environment |
+| React dashboard | Presents the verified testnet lifecycle and links every successful state transition to Stellar Expert |
 
-## Circuit public inputs
+## End-to-end voting workflow
 
-The public input order is fixed:
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin
+    participant Contract as zkBallot contract
+    participant Voter as Eligible voter
+    participant Noir as Noir + UltraHonk prover
+    participant Verifier as Nethermind verifier
 
-1. `merkle_root`
-2. `contract_domain`
-3. `proposal_id`
-4. `nullifier`
-5. `vote`
+    Admin->>Contract: register_voter(commitment, index, new_root, leaf_count)
+    Contract-->>Admin: Updated append-only root
+    Admin->>Contract: create_proposal(meta_hash, deadline)
+    Contract-->>Admin: proposal_id + root snapshot
 
-Each field is encoded as one canonical 32-byte big-endian BN254 scalar.
+    Voter->>Noir: Private identity, trapdoor, Merkle path
+    Voter->>Noir: Public root, domain, proposal, nullifier, vote
+    Noir-->>Voter: UltraHonk proof
 
-The checked-in circuit uses `TREE_DEPTH = 20`, matching the implementation plan. Proof generation requires the Linux `jq`, `base64`, and `gunzip` binaries to resolve before Windows shims in WSL; the project scripts set a clean PATH for this.
+    Voter->>Contract: cast_vote(proposal_id, proof, nullifier, vote)
+    Contract->>Contract: Reconstruct five public inputs
+    Contract->>Verifier: verify(proof, public_inputs)
+    Verifier-->>Contract: Valid proof
+    Contract->>Contract: Store nullifier and increment tally
+    Contract-->>Voter: Updated public tally
+
+    Voter->>Contract: Replay same proposal nullifier
+    Contract-->>Voter: NullifierUsed (#6)
+
+    Admin->>Contract: finalize(proposal_id) after deadline
+    Contract-->>Admin: Final yes/no tally
+```
+
+## Privacy and public data boundary
+
+```mermaid
+flowchart TB
+    subgraph Private["Private witness — never sent to Stellar"]
+        Secret["identity_secret"]
+        Trapdoor["identity_trapdoor"]
+        Path["merkle_path[20]"]
+        Indices["path_indices[20]"]
+    end
+
+    subgraph Proof["Zero-knowledge statement"]
+        Membership["Commitment is included in the proposal root"]
+        Binding["Nullifier is bound to contract + proposal"]
+        Binary["vote is 0 or 1"]
+    end
+
+    subgraph Public["Public inputs / contract-visible data"]
+        Root["merkle_root"]
+        Domain["contract_domain"]
+        Proposal["proposal_id"]
+        Nullifier["nullifier"]
+        Vote["vote"]
+    end
+
+    subgraph Chain["Public Stellar state"]
+        Registry["Commitments + current root"]
+        Proposals["Proposal snapshot + deadline"]
+        Spent["Spent proposal nullifiers"]
+        Tally["Live and finalized yes/no tally"]
+    end
+
+    Private --> Proof
+    Public --> Proof
+    Proof -->|"UltraHonk proof"| Chain
+    Public --> Chain
+```
+
+### What remains private
+
+- the identity secret and trapdoor;
+- the Merkle authentication path and path indices; and
+- which registered leaf generated a valid proof.
+
+### What is public
+
+- the proposal root and registered commitments;
+- the contract domain and proposal ID;
+- the proposal-scoped nullifier;
+- the vote value, `0` or `1`;
+- the live yes/no tally; and
+- the finalized result and all testnet transactions.
+
+### What zkBallot does not claim
+
+- encrypted or sealed ballots;
+- a hidden interim tally;
+- unlinkability against all network-level metadata;
+- coercion resistance or receipt freeness;
+- resistance to a malicious eligibility administrator;
+- production audit coverage; or
+- mainnet readiness.
+
+## Repository structure
+
+```text
+zkballot/
+├── artifacts/
+│   ├── ballot/                 # Compiled Noir artifact, VK, checksums
+│   ├── fixture/                # Reproducible single-voter proof fixture
+│   └── e2e/                    # Three-voter E2E proof fixtures
+├── circuits/
+│   └── ballot/
+│       ├── src/main.nr         # Noir membership/nullifier/vote circuit
+│       ├── Nargo.toml          # Circuit package and Poseidon dependency
+│       └── Prover.toml         # Fixture prover inputs
+├── contracts/
+│   └── ballot/
+│       ├── Cargo.toml          # Soroban workspace configuration
+│       └── contracts/ballot/
+│           ├── src/lib.rs      # Contract implementation
+│           ├── src/test.rs     # Contract unit tests
+│           └── Cargo.toml      # Verifier dependency and build features
+├── scripts/
+│   ├── build-artifacts.sh      # Compile circuit and generate VK
+│   ├── generate-proof-inputs.ts
+│   ├── prove-fixture.sh        # Generate and natively verify a proof
+│   ├── deploy-testnet.sh       # Build and deploy the contract
+│   ├── testnet-fixture-demo.sh # Exercise a configured testnet contract
+│   └── e2e-localnet.sh         # Full 3-voter localnet lifecycle
+├── video-demo/                 # Demo design, storyboard, narration, recorder
+├── web/
+│   ├── src/App.jsx             # Public testnet evidence dashboard
+│   └── src/lib/                # Identity, prover, and Stellar helpers/tests
+├── .env.example                # Testnet configuration template
+├── package.json                # Root commands and JS dependencies
+└── zkballot-demo-video.mp4     # Submission demo video
+```
+
+## Circuit design
+
+The circuit is implemented in
+[`circuits/ballot/src/main.nr`](./circuits/ballot/src/main.nr) with
+`TREE_DEPTH = 20`.
+
+### Identity commitment
+
+```text
+commitment = Poseidon2(identity_secret, identity_trapdoor)
+```
+
+The circuit recomputes the Merkle root from the private path and constrains it
+to equal the public proposal root.
+
+### Proposal-scoped nullifier
+
+```text
+external_nullifier =
+  Poseidon2(DOMAIN_ZKBALLOT, contract_domain, proposal_id)
+
+nullifier =
+  Poseidon2(identity_secret, external_nullifier)
+```
+
+`DOMAIN_ZKBALLOT`, the deployed contract domain, and the proposal ID provide
+domain separation. The same eligible identity can therefore receive a
+different valid nullifier for another proposal, while reuse within the same
+proposal is rejected.
+
+### Binary vote constraint
+
+```text
+vote == 0 OR vote == 1
+```
+
+The circuit checks this constraint, and the contract independently rejects a
+calldata vote greater than `1`.
+
+### Public-input order
+
+The order is part of the protocol and must not change independently in the
+circuit, proof tooling, or contract:
+
+| Index | Public input | Source used by the contract |
+| ---: | --- | --- |
+| 0 | `merkle_root` | Proposal root snapshot |
+| 1 | `contract_domain` | Contract instance storage |
+| 2 | `proposal_id` | `cast_vote` argument |
+| 3 | `nullifier` | `cast_vote` argument |
+| 4 | `vote` | `cast_vote` argument |
+
+Each value is encoded as one canonical 32-byte, big-endian BN254 scalar. The
+contract concatenates the five fields into the verifier input buffer.
+
+## Soroban contract design
+
+The contract implementation is in
+[`contracts/ballot/contracts/ballot/src/lib.rs`](./contracts/ballot/contracts/ballot/src/lib.rs).
+
+### Lifecycle and state
+
+| State | Storage | Purpose |
+| --- | --- | --- |
+| Admin | Instance | Authorizes registry and proposal mutations |
+| Contract domain | Instance | Separates nullifiers across deployments |
+| Verifying key | Instance or compiled static bytes | Configures UltraHonk verification |
+| Current root and leaf count | Instance | Tracks the append-only eligibility tree |
+| Commitment index | Persistent | Prevents duplicate registration and records insertion order |
+| Proposal | Persistent | Stores root snapshot, metadata hash, deadline, tally, and finalization flag |
+| Nullifier marker | Persistent | Blocks reuse for a specific proposal |
+
+Contract instance and persistent entries extend their TTL when accessed.
+
+### Public interface
+
+| Method | Authorization | Behavior |
+| --- | --- | --- |
+| `__constructor` | Deployment | Stores admin, domain, VK, empty root, and next proposal ID |
+| `admin` | Public read | Returns the administrator address |
+| `contract_domain` | Public read | Returns the nullifier domain |
+| `verifying_key` | Public read | Returns the stored VK |
+| `get_root` | Public read | Returns current root and leaf count |
+| `register_voter` | Admin | Appends one commitment and updates the root |
+| `commitment_index` | Public read | Returns a registered commitment index |
+| `create_proposal` | Admin | Snapshots the current root and creates a future deadline |
+| `get_proposal` / `proposal` | Public read | Returns proposal state |
+| `tally` | Public read | Returns the yes/no tally |
+| `has_voted` | Public read | Checks a proposal/nullifier pair |
+| `pack_public_inputs_view` | Public read | Exposes canonical verifier input packing |
+| `cast_vote` | Public | Validates state, verifies proof, stores nullifier, updates tally |
+| `finalize` | Public after deadline | Locks the proposal and returns the final tally |
+
+### Contract errors
+
+| Code | Error | Meaning |
+| ---: | --- | --- |
+| 1 | `AlreadyInitialized` | Initialization was attempted twice |
+| 2 | `NotInitialized` | Required instance state is absent |
+| 3 | `ProposalExists` | Reserved proposal collision error |
+| 4 | `ProposalMissing` | Proposal ID does not exist |
+| 5 | `RootMissing` | Commitment/root lookup failed |
+| 6 | `NullifierUsed` | This proposal nullifier has already voted |
+| 7 | `InvalidVote` | Vote is not binary |
+| 8 | `InvalidPublicInputs` | Reserved public-input validation error |
+| 9 | `EmptyProof` | No proof bytes were supplied |
+| 10 | `VkParseError` | The verifier could not parse the VK |
+| 11 | `ProofParseError` | Reserved proof parsing error |
+| 12 | `VerificationFailed` | UltraHonk verification failed |
+| 13 | `CommitmentExists` | Commitment is already registered |
+| 14 | `NonSequentialIndex` | Registry insertion index is not next |
+| 15 | `NonMonotonicLeafCount` | New leaf count is invalid |
+| 16 | `PastDeadline` | Proposal deadline is not in the future |
+| 17 | `ProposalClosed` | Voting deadline has passed |
+| 18 | `Finalized` | Proposal is already finalized |
+| 19 | `TooEarlyToFinalize` | Deadline has not been reached |
+
+## UltraHonk verifier integration
+
+The default contract feature uses Nethermind's
+[`rs-soroban-ultrahonk`](https://github.com/NethermindEth/rs-soroban-ultrahonk)
+at revision:
+
+```text
+661db07200f890b1bd9a7349ed787c70a706dd12
+```
+
+The circuit artifact, verification key, proof, and public inputs are created
+with:
+
+```text
+scheme      = ultra_honk
+oracle_hash = keccak
+```
+
+Two contract build modes are available:
+
+- **Stored VK (default):** constructor stores `vk_bytes` in instance storage.
+- **Static VK:** `--features static-vk` embeds
+  [`artifacts/ballot/vk`](./artifacts/ballot/vk) into the WASM and removes the
+  runtime VK storage read from the verification path.
+
+The latest successful testnet lifecycle used the static-VK build.
+
+## Technology stack
+
+| Layer | Technology |
+| --- | --- |
+| ZK circuit | Noir 1.0.0-beta.9 |
+| Hashing | Poseidon2 |
+| Proof system | Barretenberg UltraHonk 0.87.0 |
+| Smart contract | Rust + Soroban SDK 26.1.0 |
+| On-chain verifier | Nethermind `rs-soroban-ultrahonk` |
+| Network tooling | Stellar CLI 27.0.0 |
+| Scripts/tests | Node.js 20.20.2, TypeScript, Vitest |
+| Demo | React 19 + Vite 7 |
+| Local chain | Stellar localnet protocol 26 via Docker |
+| Primary development environment | Ubuntu 24.04 on WSL2 |
+
+## Prerequisites
+
+Use Ubuntu/WSL2 for the complete ZK, Rust, Docker, and Stellar workflow.
+
+- Git
+- Node.js 20.20.2 and npm
+- Rust 1.95.0 with the `wasm32v1-none` target
+- Stellar CLI 27.0.0
+- Nargo 1.0.0-beta.9
+- Barretenberg (`bb`) 0.87.0
+- Docker Engine for localnet
+- Bash, `curl`, `sha256sum`, `base64`, and `gunzip`
+
+The build scripts download a project-local Linux `jq` 1.7.1 binary when it is
+missing. They also establish a Linux-first `PATH` to avoid Windows executable
+shims when running inside WSL.
+
+## Quick start
+
+Run from the repository root in WSL:
+
+```bash
+npm install
+
+export PATH="$PWD/tools/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.bb:$HOME/.nvm/versions/node/v20.20.2/bin:$HOME/.cargo/bin:$HOME/.nargo/bin:$HOME/.local/bin"
+
+# TypeScript utilities and web helpers
+npm test
+
+# Noir circuit tests
+nargo test --program-dir circuits/ballot
+
+# Compile circuit and generate the UltraHonk VK
+npm run build:artifacts
+
+# Generate and natively verify a reproducible proof
+npm run fixture:prove
+
+# Soroban contract unit tests
+cargo test --manifest-path contracts/ballot/Cargo.toml
+
+# Build default stored-VK contract
+(cd contracts/ballot && stellar contract build)
+
+# Build optimized static-VK contract
+(cd contracts/ballot && stellar contract build --features static-vk)
+
+# Build the evidence dashboard
+npm run web:build
+```
+
+## Tests and expected results
+
+| Suite | Command | Current coverage/result |
+| --- | --- | --- |
+| Noir circuit | `nargo test --program-dir circuits/ballot` | 6 tests: valid proof plus wrong root/domain/proposal/nullifier and non-binary vote rejection |
+| TypeScript and web helpers | `npm test` | 15 tests across encoding, Merkle tree, identity, prover, and Stellar helpers |
+| Native proof fixture | `npm run fixture:prove` | Ends with `Proof verified successfully` and checks exact public-input bytes |
+| Soroban contract | `cargo test --manifest-path contracts/ballot/Cargo.toml` | 7 tests covering initialization, registry, proposals, voting, replay, deadlines, and finalization |
+| Localnet lifecycle | `npm run e2e:localnet` | Three proofs accepted, replay rejected, final tally yes=2/no=1 |
+| Web production build | `npm run web:build` | Produces static Vite assets in `web/dist` |
+
+The checked-in proof artifacts are protected by SHA-256 manifests:
+
+- [`artifacts/ballot/SHA256SUMS`](./artifacts/ballot/SHA256SUMS)
+- [`artifacts/fixture/SHA256SUMS`](./artifacts/fixture/SHA256SUMS)
 
 ## Localnet E2E
 
-The full plan-level E2E runs on Stellar localnet with protocol 26 and unlimited Soroban limits:
+Start a protocol-26 localnet with unlimited Soroban limits:
 
 ```bash
-stellar container start local --protocol-version 26 --limits unlimited --name zkballot-localnet
+stellar container start local \
+  --protocol-version 26 \
+  --limits unlimited \
+  --name zkballot-localnet
+```
+
+Then execute the complete lifecycle:
+
+```bash
 npm run e2e:localnet
 ```
 
-The E2E script:
+The script:
 
-1. builds the depth-20 Noir circuit and static-VK Soroban contract with the Nethermind UltraHonk verifier;
-2. generates three UltraHonk proofs for three identities;
-3. registers three voter commitments and snapshots the root in a proposal;
-4. casts `yes/no/yes`;
-5. rejects a repeated nullifier; and
-6. finalizes to `{"no":1,"yes":2}`.
+1. checks localnet health;
+2. creates or funds the local administrator;
+3. builds the circuit, VK, and static-VK contract;
+4. generates three independent UltraHonk proofs;
+5. deploys the contract;
+6. registers three commitments;
+7. creates a proposal from the three-leaf root;
+8. casts `yes / no / yes`;
+9. verifies that a repeated nullifier fails;
+10. checks the live tally;
+11. waits for the deadline; and
+12. finalizes to `{"no":1,"yes":2}`.
 
-Last verified localnet result:
+Expected final output:
 
 ```text
-Contract: CDF2SO323RAPZND25NVHUYBQ3WXRYJJ3E5LIUG5GTC62ECLW7P3OMNV7
 Tally before finalize: {"no":1,"yes":2}
 Final tally: {"no":1,"yes":2}
 zkBallot localnet E2E passed: yes/no/yes, double-vote rejected, finalized to (2, 1).
 ```
 
-## Testnet deploy
+## Testnet deployment
 
-Create a funded Stellar CLI identity first, then:
+### 1. Create and fund a Stellar CLI identity
+
+```bash
+stellar keys generate zkballot-deployer --network testnet --fund
+stellar keys address zkballot-deployer
+```
+
+The first command creates the local CLI identity and funds it through
+Friendbot. The second prints the public address used as `ADMIN_ADDRESS`.
+
+### 2. Configure the environment
 
 ```bash
 cp .env.example .env
+```
+
+```dotenv
+STELLAR_NETWORK=testnet
+STELLAR_SOURCE=zkballot-deployer
+ADMIN_ADDRESS=G_YOUR_PUBLIC_ADDRESS
+CONTRACT_DOMAIN=987654
+BALLOT_ID=
+```
+
+- `STELLAR_SOURCE` is the local Stellar CLI identity name.
+- `ADMIN_ADDRESS` is its `G...` public address.
+- Never commit secret keys or seed phrases.
+
+### 3. Deploy
+
+Default stored-VK build:
+
+```bash
+set -a
 source .env
+set +a
 npm run deploy:testnet
 ```
 
-The deploy script builds artifacts, proves the fixture, builds WASM, and deploys with the VK passed to the constructor.
-
-To reproduce the optimized static-VK deployment:
+Optimized static-VK build:
 
 ```bash
-STELLAR_BUILD_FEATURES=static-vk STELLAR_CONTRACT_ALIAS=zkballot-static-vk npm run deploy:testnet
+set -a
+source .env
+set +a
+STELLAR_BUILD_FEATURES=static-vk \
+STELLAR_CONTRACT_ALIAS=zkballot-static-vk \
+npm run deploy:testnet
 ```
 
-Latest testnet three-voter E2E (`static-vk` + Nethermind verifier preview):
+Copy the returned contract ID into `BALLOT_ID` in `.env`.
 
-- Contract: `CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ`
-- Deploy tx: <https://stellar.expert/explorer/testnet/tx/1a9069576a2cff36b4ceb326bd1054ed2ef9c311c37df04268277db652f4de28>
-- Register voter txs:
-  - <https://stellar.expert/explorer/testnet/tx/4cb6125ff354577f864ed0f89fe1073eefc64e3178e6bc6142139605856c645b>
-  - <https://stellar.expert/explorer/testnet/tx/f0c12435a601be593fa5bc03c587a72a5812e4d7894ac87c6ad4be2dfa0a5c55>
-  - <https://stellar.expert/explorer/testnet/tx/1beb26702e41826c2582ab0275e5f71a3140ee77e014136e94de47ea7abc2748>
-- Create proposal tx: <https://stellar.expert/explorer/testnet/tx/dba6a51a928b88c77cc68ba67bfaa627e4c94f284c02aa8c3b0f1ef1eef2d2ad>
-- Cast vote txs:
-  - yes: <https://stellar.expert/explorer/testnet/tx/c01a73c7ac1cc9e015722a71f262bc0c627e81c7d01af00218677fba024d3c49>
-  - no: <https://stellar.expert/explorer/testnet/tx/b2e1cdc66e0e810cd1068fdebb80b122aef40223b4e924fc6773f64d4862a177>
-  - yes: <https://stellar.expert/explorer/testnet/tx/f45451e73a77e2019563c1a49f2816e235f16fc00841a7d1400190765b0893ab>
-- Double-vote check: replaying voter 0's nullifier is rejected with `NullifierUsed (#6)`.
-- Finalize tx: <https://stellar.expert/explorer/testnet/tx/4ffbcbd515c808097abf8c4f66df0121f2b937d9f52dde62bda0cdff53bbd9ad>
-- Verified final state: `finalized = true`, `tally = {"no":1,"yes":2}`
-
-Historical testnet demo deployment from before the Nethermind preview migration (`static-vk` verifier build):
-
-- Contract: `CBJOYLAFVEHPJY2UMDKJYOQHFVOFUI73ZSPYYG6NU7DNU5VZ47A6EQUQ`
-- WASM upload tx: <https://stellar.expert/explorer/testnet/tx/b6c4229880824c9046adcb0b5d380d21e156b8739669a1ceb40640dc21f84916>
-- Deploy tx: <https://stellar.expert/explorer/testnet/tx/bb66634cdc9e688f163372c2b676a5e6885c7f5dcfcf60da6ec19dc2e6373b2b>
-- Proposal tx: <https://stellar.expert/explorer/testnet/tx/fa20fd8eb95d74ddc4aafe645a53419606a6419f82ca045315352ef7742d75d1>
-
-Previous default stored-VK deployment:
-
-- Contract: `CBRDNA55CAQTAQD2VWIMILT224RSBGXBQ2ERYUD7XOZBTTGU37TX4ZJJ`
-- Deploy tx: <https://stellar.expert/explorer/testnet/tx/6aba7e821c09aa33bb02a4f6e74088e5f9688187d632969e24e09ac430349429>
-- Proposal tx: <https://stellar.expert/explorer/testnet/tx/1218755d63c577609aeb4d78fcf6874d2732fe9640eb120a0d9732eb1a3c91d4>
-
-The historical proposal/root state is live on testnet. Before the Nethermind preview migration, the `cast_vote` path reached Soroban simulation but failed with `HostError: Error(Budget, ExceededLimit)` while running the earlier UltraHonk verifier. The current Nethermind-backed build has been verified both end-to-end on protocol-26 localnet with unlimited limits and on testnet for the three-voter lifecycle above.
-
-Optimization note: the `static-vk` build removes the contract storage read and VK fetch from the verification path. In the pre-migration testnet attempt this was not enough to fit the earlier verifier under testnet budget, which indicated the dominant cost was inside UltraHonk verification itself rather than Merkle state logic.
-
-Run the state/proof demo:
+### 4. Run the configured fixture demo
 
 ```bash
 npm run fixture:prove
 npm run demo:testnet
 ```
 
-## Demo UI
+## Verified Stellar testnet evidence
+
+**Contract:** [`CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ`](https://stellar.expert/explorer/testnet/contract/CCXOON5YG6WR2LHNIO2DSBWLHHP5X7TH5RJKVKY4EBIB4RXMJLX2WONQ)
+
+| Step | Result | Stellar Expert |
+| ---: | --- | --- |
+| 1 | Deploy static-VK ballot contract | [Transaction](https://stellar.expert/explorer/testnet/tx/1a9069576a2cff36b4ceb326bd1054ed2ef9c311c37df04268277db652f4de28) |
+| 2 | Register voter commitment 0 | [Transaction](https://stellar.expert/explorer/testnet/tx/4cb6125ff354577f864ed0f89fe1073eefc64e3178e6bc6142139605856c645b) |
+| 3 | Register voter commitment 1 | [Transaction](https://stellar.expert/explorer/testnet/tx/f0c12435a601be593fa5bc03c587a72a5812e4d7894ac87c6ad4be2dfa0a5c55) |
+| 4 | Register voter commitment 2 | [Transaction](https://stellar.expert/explorer/testnet/tx/1beb26702e41826c2582ab0275e5f71a3140ee77e014136e94de47ea7abc2748) |
+| 5 | Create proposal 1 with root snapshot | [Transaction](https://stellar.expert/explorer/testnet/tx/dba6a51a928b88c77cc68ba67bfaa627e4c94f284c02aa8c3b0f1ef1eef2d2ad) |
+| 6 | Cast `YES`; proof verified | [Transaction](https://stellar.expert/explorer/testnet/tx/c01a73c7ac1cc9e015722a71f262bc0c627e81c7d01af00218677fba024d3c49) |
+| 7 | Cast `NO`; proof verified | [Transaction](https://stellar.expert/explorer/testnet/tx/b2e1cdc66e0e810cd1068fdebb80b122aef40223b4e924fc6773f64d4862a177) |
+| 8 | Cast `YES`; proof verified | [Transaction](https://stellar.expert/explorer/testnet/tx/f45451e73a77e2019563c1a49f2816e235f16fc00841a7d1400190765b0893ab) |
+| 9 | Finalize after the deadline | [Transaction](https://stellar.expert/explorer/testnet/tx/4ffbcbd515c808097abf8c4f66df0121f2b937d9f52dde62bda0cdff53bbd9ad) |
+
+Replay evidence:
+
+- Reusing voter 0's proposal-scoped nullifier was rejected during simulation
+  with `NullifierUsed (#6)`.
+- Because the rejected replay did not create a successful state transition,
+  there is no successful transaction hash for it.
+- The final verified contract state is `finalized = true` and
+  `tally = {"no":1,"yes":2}`.
+
+## Demo web application
+
+Start the dashboard:
 
 ```bash
 npm run web:dev
 ```
 
-For a static build:
+Open [http://localhost:5173](http://localhost:5173). The dashboard presents:
+
+- the deployed contract;
+- the final tally and replay-rejection result;
+- links to all nine successful testnet transactions;
+- the private/public ZK data boundary;
+- verifier configuration and public-input order; and
+- reproducibility commands.
+
+Create a production build:
 
 ```bash
 npm run web:build
 ```
 
-## Video/demo script
+The dashboard is currently provided as a local/static build; this README does
+not claim a public hosted URL.
 
-Submission demo video: [`zkballot-demo-video.mp4`](./zkballot-demo-video.mp4)  
-Duration: 2:24. The video includes voiceover, captions, the privacy boundary, the ZK circuit/contract flow, and the verified Stellar testnet three-voter lifecycle.
+## Demo video
 
-Suggested narration:
+The submission video is checked in at
+[`zkballot-demo-video.mp4`](./zkballot-demo-video.mp4).
 
-1. “zkBallot proves a voter is registered without revealing which registered identity they used.”
-2. “The vote is intentionally public input, so the Soroban contract can update a transparent yes/no tally.”
-3. “The contract verifies the UltraHonk proof, binds calldata to public inputs, rejects reused nullifiers, then increments the public tally.”
-4. “This is anonymous voting, not encrypted tallying.”
+- Duration: **124.818 seconds** (2:04.8).
+- Resolution: **1280 × 720**.
+- Content: working evidence dashboard, Stellar Expert contract activity,
+  successful vote transactions, replay rejection, reproduction commands, and
+  the honest privacy boundary.
+- Script and capture sources:
+  [`video-demo/`](./video-demo/).
 
-Implementation follows [`../plans/02-zkBallot-plan.md`](../plans/02-zkBallot-plan.md).
+## Security model
+
+### Assumptions
+
+- Poseidon2, Noir, Barretenberg UltraHonk, and the verifier behave correctly.
+- The circuit artifact and on-chain verification key correspond.
+- The administrator registers only eligible commitments and submits correct
+  append-only roots.
+- Voters keep their identity secrets and trapdoors confidential.
+- The client constructs the canonical Merkle path and public inputs.
+- Stellar consensus and Soroban state execution remain correct.
+
+### Enforced properties
+
+- A valid proof requires membership in the proposal's snapshotted root.
+- The nullifier is derived from the identity secret, contract domain, and
+  proposal ID.
+- The public vote is binary.
+- Contract calldata is bound to the proof through contract-reconstructed public
+  inputs.
+- A proposal/nullifier pair can mutate the tally only once.
+- Voting closes at the deadline and cannot continue after finalization.
+- Registry mutation and proposal creation require admin authorization.
+
+### Limitations and threats
+
+- **Public vote:** observers can see individual submitted vote values.
+- **Metadata leakage:** transaction sender, timing, IP-level observations, or
+  client behavior may reduce practical anonymity.
+- **Malicious administrator:** the admin controls the eligibility registry and
+  could omit eligible voters or register unauthorized commitments.
+- **No encrypted aggregation:** the live tally is visible and may influence
+  later voters.
+- **No coercion resistance:** a voter may be able to demonstrate how they
+  voted through external evidence.
+- **Client integrity:** a compromised prover client can leak private witness
+  data even though the protocol does not publish it.
+- **Preview verifier:** the current verifier integration is suitable for
+  hackathon testnet evaluation, not unaudited production deployment.
+- **No external audit:** neither the circuit nor contract has received an
+  independent security audit.
+
+## Confidential Tokens developer preview
+
+OpenZeppelin and SDF's Confidential Tokens developer preview brings private
+balances and transfer amounts to SEP-41 tokens and demonstrates real
+Noir/UltraHonk verification on Soroban.
+
+zkBallot uses the same relevant verifier direction through Nethermind's
+Soroban UltraHonk backend. It does **not** currently wrap a SEP-41 asset or use
+the Confidential Token contract itself.
+
+A future token-governance extension could combine:
+
+- confidential token balances for private voting power;
+- zkBallot's proposal membership and nullifier rules; and
+- auditable compliance hooks.
+
+That future design would require a new circuit and aggregation model. The
+current project intentionally keeps `vote` public and must not be described as
+encrypted tallying.
+
+References:
+
+- [OpenZeppelin Stellar contracts preview branch](https://github.com/OpenZeppelin/stellar-contracts/tree/feat/confidential-verifier-ultrahonk)
+- [Confidential Tokens preview demo](https://stellar-confidential-token-demo.billowing-moon-0c6f.workers.dev/)
+
+## Troubleshooting
+
+### `vite` is not recognized on Windows
+
+The complete toolchain and existing dependencies are designed for WSL. Run the
+commands from Ubuntu in `/mnt/d/dorahack/stellar/zkballot`, or install the npm
+dependencies in the active operating system before starting Vite.
+
+### WSL reports `Wsl/Service/0x8007274c`
+
+Restart the WSL service from an elevated PowerShell session, then reopen Ubuntu:
+
+```powershell
+wsl --shutdown
+```
+
+If the error persists, restart Windows networking or the machine before
+continuing the Linux-only proof and contract workflow.
+
+### `jq`, `base64`, or `gunzip` resolves to a Windows shim
+
+Use the documented Linux-first `PATH`. Proof generation depends on Linux
+binary behavior and may fail when Windows executables resolve first.
+
+### Localnet is unhealthy
+
+Confirm Docker is running inside WSL, then start the expected container:
+
+```bash
+docker version
+stellar container start local \
+  --protocol-version 26 \
+  --limits unlimited \
+  --name zkballot-localnet
+stellar network health --network local
+```
+
+### Proof verification fails
+
+Rebuild the circuit artifact and VK, then regenerate the proof:
+
+```bash
+npm run build:artifacts
+npm run fixture:prove
+```
+
+Do not mix artifacts generated by different Noir, Barretenberg, transcript, or
+verifier versions.
+
+### A vote fails with `NullifierUsed (#6)`
+
+The same proposal-scoped nullifier has already voted. Generate a proof from a
+different eligible identity. A separate proposal derives a different
+nullifier.
+
+## Roadmap
+
+- Publish the static dashboard at a stable public URL.
+- Add wallet-based submission without exposing private witness material to the
+  web application.
+- Replace admin-submitted Merkle roots with stronger append-only root
+  verification or a governed registry.
+- Add proposal metadata resolution and human-readable ballot descriptions.
+- Evaluate confidential voting power with the Stellar Confidential Tokens
+  preview.
+- Research encrypted aggregation or threshold decryption for a genuinely
+  private tally.
+- Add external circuit and contract audits before any production deployment.
+
+## Submission checklist
+
+- [x] Meaningful zero-knowledge circuit.
+- [x] Real proof verification in a Stellar Soroban contract.
+- [x] Complete Stellar testnet lifecycle.
+- [x] Public contract and transaction evidence.
+- [x] Three-voter success case.
+- [x] Double-vote rejection case.
+- [x] Deadline finalization and verified final tally.
+- [x] Reproducible source code, scripts, tests, and checked-in artifacts.
+- [x] English project documentation with architecture and workflow diagrams.
+- [x] Two-to-three-minute demo video showing the working project.
+- [ ] Publish the repository on a public Git host before submission.
+- [ ] Publish the dashboard at a stable public URL if desired.
+- [ ] Add an explicit open-source license file.
+
+## References
+
+- [Stellar developer documentation](https://developers.stellar.org/)
+- [Soroban SDK](https://github.com/stellar/rs-soroban-sdk)
+- [Noir documentation](https://noir-lang.org/docs/)
+- [Barretenberg](https://github.com/AztecProtocol/aztec-packages/tree/master/barretenberg)
+- [Nethermind Soroban UltraHonk verifier](https://github.com/NethermindEth/rs-soroban-ultrahonk)
+- [Implementation plan](../plans/02-zkBallot-plan.md)
+
+## License status
+
+No license file is currently included. Add an explicit open-source license
+before publishing the submission repository so reuse rights are unambiguous.
