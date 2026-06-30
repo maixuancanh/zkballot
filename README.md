@@ -762,36 +762,6 @@ The same proposal-scoped nullifier has already voted. Generate a proof from a
 different eligible identity. A separate proposal derives a different
 nullifier.
 
-## Roadmap
-
-- Publish the static dashboard at a stable public URL.
-- Add wallet-based submission without exposing private witness material to the
-  web application.
-- Replace admin-submitted Merkle roots with stronger append-only root
-  verification or a governed registry.
-- Add proposal metadata resolution and human-readable ballot descriptions.
-- Evaluate confidential voting power with the Stellar Confidential Tokens
-  preview.
-- Research encrypted aggregation or threshold decryption for a genuinely
-  private tally.
-- Add external circuit and contract audits before any production deployment.
-
-## Submission checklist
-
-- [x] Meaningful zero-knowledge circuit.
-- [x] Real proof verification in a Stellar Soroban contract.
-- [x] Complete Stellar testnet lifecycle.
-- [x] Public contract and transaction evidence.
-- [x] Three-voter success case.
-- [x] Double-vote rejection case.
-- [x] Deadline finalization and verified final tally.
-- [x] Reproducible source code, scripts, tests, and checked-in artifacts.
-- [x] English project documentation with architecture and workflow diagrams.
-- [x] Two-to-three-minute demo video showing the working project.
-- [ ] Publish the repository on a public Git host before submission.
-- [ ] Publish the dashboard at a stable public URL if desired.
-- [ ] Add an explicit open-source license file.
-
 ## References
 
 - [Stellar developer documentation](https://developers.stellar.org/)
@@ -801,7 +771,6 @@ nullifier.
 - [Nethermind Soroban UltraHonk verifier](https://github.com/NethermindEth/rs-soroban-ultrahonk)
 - [Implementation plan](../plans/02-zkBallot-plan.md)
 
-## License status
+## License
 
-No license file is currently included. Add an explicit open-source license
-before publishing the submission repository so reuse rights are unambiguous.
+This project is licensed under the [MIT License](./LICENSE).
