@@ -143,6 +143,16 @@ To reproduce the optimized static-VK deployment:
 STELLAR_BUILD_FEATURES=static-vk STELLAR_CONTRACT_ALIAS=zkballot-static-vk npm run deploy:testnet
 ```
 
+Latest testnet demo deployment (`static-vk` + Nethermind verifier preview):
+
+- Contract: `CDXG66ONYM42NOUO5VGYCF65XC7I4GUKTW32KHSUCQLQNED27XW4BX5Q`
+- WASM upload tx: <https://stellar.expert/explorer/testnet/tx/cf1c7c19cf0d8cacb813073b2b8fbb276cee012c38ceb2055e2b34cfe2a0f318>
+- Deploy tx: <https://stellar.expert/explorer/testnet/tx/5f277e3aa4a1092d264af80c290adcc0a2d502136c42bc8cebd3e21f932c23b6>
+- Register fixture voter tx: <https://stellar.expert/explorer/testnet/tx/be9bcdb4cdeb2ca5bda18fd636137f83283393bef49f3e9520a04e13db77b8be>
+- Create proposal tx: <https://stellar.expert/explorer/testnet/tx/2daee05a909b150131dfbd57d2a08fa4e70dbee585ea13285fb3728f201c35a7>
+- Cast fixture vote tx: <https://stellar.expert/explorer/testnet/tx/ec7c4954bd12fbd477935e08c85d05a2d5a081020dcf363dff346fa0e973b939>
+- Verified state: `tally = {"no":0,"yes":1}`, `has_voted = true`
+
 Historical testnet demo deployment from before the Nethermind preview migration (`static-vk` verifier build):
 
 - Contract: `CBJOYLAFVEHPJY2UMDKJYOQHFVOFUI73ZSPYYG6NU7DNU5VZ47A6EQUQ`
@@ -156,7 +166,7 @@ Previous default stored-VK deployment:
 - Deploy tx: <https://stellar.expert/explorer/testnet/tx/6aba7e821c09aa33bb02a4f6e74088e5f9688187d632969e24e09ac430349429>
 - Proposal tx: <https://stellar.expert/explorer/testnet/tx/1218755d63c577609aeb4d78fcf6874d2732fe9640eb120a0d9732eb1a3c91d4>
 
-The historical proposal/root state is live on testnet. Before the Nethermind preview migration, the `cast_vote` path reached Soroban simulation but failed with `HostError: Error(Budget, ExceededLimit)` while running the earlier UltraHonk verifier. The current Nethermind-backed build has been verified end-to-end on protocol-26 localnet with unlimited limits; rerun `npm run deploy:testnet` if you want a fresh preview-stack testnet deployment.
+The historical proposal/root state is live on testnet. Before the Nethermind preview migration, the `cast_vote` path reached Soroban simulation but failed with `HostError: Error(Budget, ExceededLimit)` while running the earlier UltraHonk verifier. The current Nethermind-backed build has been verified both end-to-end on protocol-26 localnet with unlimited limits and on testnet for the single-fixture demo vote above.
 
 Optimization note: the `static-vk` build removes the contract storage read and VK fetch from the verification path. In the pre-migration testnet attempt this was not enough to fit the earlier verifier under testnet budget, which indicated the dominant cost was inside UltraHonk verification itself rather than Merkle state logic.
 
