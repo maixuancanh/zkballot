@@ -23,6 +23,8 @@ export PATH="$(dirname "$JQ_BIN"):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/
 : "${VOTES:=1,0,1}"
 : "${START_LOCALNET:=0}"
 : "${LOCALNET_CONTAINER:=zkballot-localnet}"
+: "${STELLAR_BUILD_FEATURES:=static-vk}"
+: "${STELLAR_NO_DEFAULT_FEATURES:=0}"
 
 if [[ "$START_LOCALNET" == "1" ]]; then
   if ! command -v docker >/dev/null 2>&1; then
@@ -60,7 +62,11 @@ for index in 0 1 2; do
     bash scripts/prove-fixture.sh
 done
 
-(cd contracts/ballot && stellar contract build --features static-vk)
+if [[ "$STELLAR_NO_DEFAULT_FEATURES" == "1" ]]; then
+  (cd contracts/ballot && stellar contract build --no-default-features --features "$STELLAR_BUILD_FEATURES")
+else
+  (cd contracts/ballot && stellar contract build --features "$STELLAR_BUILD_FEATURES")
+fi
 
 CONTRACT_ID="$(
   stellar contract deploy \

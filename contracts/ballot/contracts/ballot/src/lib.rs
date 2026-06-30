@@ -2,8 +2,11 @@
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env,
 };
-#[cfg(not(test))]
-use ultrahonk_rust_verifier::{UltraHonkVerifier, PROOF_BYTES};
+#[cfg(all(not(test), feature = "nethermind-verifier"))]
+use ultrahonk_soroban_verifier::UltraHonkVerifier as NethermindUltraHonkVerifier;
+
+#[cfg(all(not(test), not(feature = "nethermind-verifier")))]
+compile_error!("A verifier backend is required. Enable the `nethermind-verifier` feature.");
 
 #[cfg(all(feature = "static-vk", not(test)))]
 const STATIC_VK: &[u8] = include_bytes!("../../../../../artifacts/ballot/vk");
@@ -262,11 +265,6 @@ impl BallotContract {
         if proof.is_empty() {
             return Err(Error::EmptyProof);
         }
-        #[cfg(not(test))]
-        if proof.len() as usize != PROOF_BYTES {
-            return Err(Error::ProofParseError);
-        }
-
         let proposal = Self::proposal(env.clone(), proposal_id)?;
         if proposal.finalized {
             return Err(Error::Finalized);
@@ -357,11 +355,15 @@ impl BallotContract {
             .instance()
             .get(&DataKey::VerifyingKey)
             .ok_or(Error::NotInitialized)?;
-        let verifier = UltraHonkVerifier::new(env, &vk_bytes).map_err(|_| Error::VkParseError)?;
-        verifier
-            .verify(proof, public_inputs)
-            .map_err(|_| Error::VerificationFailed)?;
-        Ok(())
+        #[cfg(feature = "nethermind-verifier")]
+        {
+            let verifier =
+                NethermindUltraHonkVerifier::new(env, &vk_bytes).map_err(|_| Error::VkParseError)?;
+            verifier
+                .verify(env, proof, public_inputs)
+                .map_err(|_| Error::VerificationFailed)?;
+            return Ok(());
+        }
     }
 
     #[cfg(test)]
