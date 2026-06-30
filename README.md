@@ -198,6 +198,9 @@ npm run web:build
 
 ## Video/demo script
 
+Submission demo video: [`zkballot-demo-video.mp4`](./zkballot-demo-video.mp4)  
+Duration: 2:24. The video includes voiceover, captions, the privacy boundary, the ZK circuit/contract flow, and the verified Stellar testnet three-voter lifecycle.
+
 Suggested narration:
 
 1. “zkBallot proves a voter is registered without revealing which registered identity they used.”
