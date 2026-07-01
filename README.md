@@ -241,13 +241,11 @@ zkballot/
 │   ├── deploy-testnet.sh       # Build and deploy the contract
 │   ├── testnet-fixture-demo.sh # Exercise a configured testnet contract
 │   └── e2e-localnet.sh         # Full 3-voter localnet lifecycle
-├── video-demo/                 # Demo design, storyboard, narration, recorder
 ├── web/
 │   ├── src/App.jsx             # Public testnet evidence dashboard
 │   └── src/lib/                # Identity, prover, and Stellar helpers/tests
 ├── .env.example                # Testnet configuration template
 ├── package.json                # Root commands and JS dependencies
-└── zkballot-demo-video.mp4     # Submission demo video
 ```
 
 ## Circuit design
@@ -652,16 +650,11 @@ The submission video is available on YouTube:
 
 [https://youtu.be/-_nXSBEjhtc](https://youtu.be/-_nXSBEjhtc)
 
-The source recording is also checked in at
-[`zkballot-demo-video.mp4`](./zkballot-demo-video.mp4).
-
 - Duration: **124.800 seconds** (2:04.8).
 - Resolution: **1280 × 720**.
 - Content: working evidence dashboard, Stellar Expert contract activity,
   successful vote transactions, replay rejection, reproduction commands, and
   the honest privacy boundary.
-- Script and capture sources:
-  [`video-demo/`](./video-demo/).
 
 ## Security model
 
